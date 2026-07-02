@@ -1,0 +1,980 @@
+<!DOCTYPE html>
+<html lang="pt-BR">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Gaps · Tomada de Decisão — TOTVS SC</title>
+<style>
+:root{
+  --navy:#0C2340; --roxo:#6F5BFF; --lilas:#E8E5FF; --cinza:#F4F4F8;
+  --ok:#1E9E6A; --warn:#E8A33D; --danger:#D64550; --ink:#2A2A35; --muted:#7A7A8C;
+}
+*{box-sizing:border-box;margin:0;padding:0}
+body{font-family:-apple-system,"Segoe UI",Arial,sans-serif;background:var(--cinza);color:var(--ink);font-size:14px}
+button{font-family:inherit;cursor:pointer}
+input,select,textarea{font-family:inherit;font-size:13px}
+
+/* ── Header ── */
+header{background:var(--navy);color:#fff;padding:12px 20px;display:flex;align-items:center;gap:16px;flex-wrap:wrap;position:sticky;top:0;z-index:40}
+header .brand{font-weight:700;letter-spacing:.4px;font-size:15px}
+header .brand small{display:block;font-weight:400;font-size:11px;opacity:.75;letter-spacing:1.2px}
+header select,header input[type=search]{border:none;border-radius:8px;padding:8px 12px;background:#1A3558;color:#fff;min-width:160px}
+header input[type=search]{min-width:230px}
+header input::placeholder{color:#9FB2CC}
+.btn{border:none;border-radius:8px;padding:8px 14px;font-weight:600;font-size:13px}
+.btn-roxo{background:var(--roxo);color:#fff}
+.btn-roxo:hover{filter:brightness(1.1)}
+.btn-ghost{background:transparent;color:#fff;border:1px solid #3A5578}
+.spacer{flex:1}
+
+/* ── KPIs ── */
+.kpis{display:grid;grid-template-columns:repeat(auto-fit,minmax(150px,1fr));gap:10px;padding:14px 20px 4px}
+.kpi{background:#fff;border-radius:12px;padding:12px 16px;box-shadow:0 1px 3px rgba(12,35,64,.08)}
+.kpi .num{font-size:24px;font-weight:800;color:var(--roxo)}
+.kpi.hero{background:var(--navy);color:#fff}
+.kpi.hero .num{color:#fff}
+.kpi .lbl{font-size:11px;color:var(--muted);text-transform:uppercase;letter-spacing:.6px;margin-top:2px}
+.kpi.hero .lbl{color:#9FB2CC}
+
+/* ── Filtros ── */
+.filters{display:flex;gap:8px;flex-wrap:wrap;align-items:center;padding:10px 20px}
+.chip{border:1.5px solid #D8D8E4;background:#fff;border-radius:20px;padding:5px 13px;font-size:12.5px;font-weight:600;color:var(--muted)}
+.chip.on{border-color:var(--roxo);background:var(--lilas);color:var(--roxo)}
+.chip.cls.on{border-color:var(--navy);background:var(--navy);color:#fff}
+.chip[data-onlysemest].on{border-color:var(--danger);background:#FBEAEA;color:var(--danger)}
+.chip[data-onlypendcons].on{border-color:#A06B00;background:#FFF3DD;color:#A06B00}
+.tagfilter{position:relative;display:inline-block}
+.tagfilter #tagFilterCount{background:var(--roxo);color:#fff;border-radius:9px;padding:0 6px;font-size:10px;margin-left:2px}
+.tagfilter-pop{display:none;position:absolute;top:calc(100% + 6px);left:0;z-index:45;background:#fff;border:1px solid #D8D8E4;border-radius:10px;box-shadow:0 8px 28px rgba(12,35,64,.18);width:280px;padding:10px}
+.tagfilter.open .tagfilter-pop{display:block}
+.tagfilter.open #tagFilterBtn{border-color:var(--roxo);background:var(--lilas);color:var(--roxo)}
+.tfp-head{display:flex;gap:6px;margin-bottom:8px}
+.tfp-head input{flex:1;border:1px solid #D8D8E4;border-radius:7px;padding:6px 9px;font-size:12px}
+.tfp-clear{background:transparent;border:none;color:var(--muted);font-size:11px;font-weight:600;cursor:pointer}
+.tfp-clear:hover{color:var(--danger)}
+.tfp-list{max-height:260px;overflow-y:auto;display:flex;flex-direction:column;gap:1px}
+.tfp-list label{display:flex;align-items:center;gap:7px;padding:5px 7px;border-radius:6px;font-size:12.5px;cursor:pointer}
+.tfp-list label:hover{background:var(--cinza)}
+.tfp-list label.on{background:var(--lilas);color:var(--roxo);font-weight:600}
+.tfp-list .cnt{margin-left:auto;font-size:10.5px;color:var(--muted)}
+.tfp-foot{display:flex;gap:12px;margin-top:8px;padding-top:8px;border-top:1px solid #EEE;font-size:11.5px;color:var(--muted)}
+.tfp-foot label{display:flex;align-items:center;gap:4px;cursor:pointer}
+.filters .sep{width:1px;height:22px;background:#D8D8E4;margin:0 4px}
+.filters label{font-size:12px;color:var(--muted);display:flex;align-items:center;gap:5px}
+
+/* ── Board ── */
+.board{display:grid;grid-template-columns:repeat(4,1fr);gap:12px;padding:10px 20px 30px;align-items:start}
+.col{background:#ECECF4;border-radius:12px;padding:10px;min-height:200px}
+.col.dragover{outline:2px dashed var(--roxo);outline-offset:-4px}
+.col h3{font-size:12.5px;text-transform:uppercase;letter-spacing:.8px;color:var(--navy);padding:4px 6px 10px;display:flex;justify-content:space-between}
+.col h3 .cnt{background:var(--navy);color:#fff;border-radius:10px;padding:1px 8px;font-size:11px}
+.card{background:#fff;border-radius:10px;padding:10px 12px;margin-bottom:8px;box-shadow:0 1px 3px rgba(12,35,64,.10);cursor:pointer;border-left:4px solid transparent;transition:transform .08s}
+.card:hover{transform:translateY(-1px);box-shadow:0 3px 8px rgba(12,35,64,.16)}
+.card.NECESSARIO{border-left-color:var(--danger)}
+.card.PRIORIDADE{border-left-color:#B0263C}
+.card.DESEJAVEL{border-left-color:var(--warn)}
+.card.INDEFINIDO{border-left-color:#A8A8C0}
+.card.OPCIONAL{border-left-color:#7FB6E8}
+.card.closed{opacity:.55;background:#F1F1F5}
+.card .cid{font-size:11px;color:var(--muted);font-weight:700}
+.card .ctitle{font-size:13px;font-weight:600;margin:3px 0 7px;line-height:1.3}
+.badges{display:flex;gap:5px;flex-wrap:wrap}
+.bdg{font-size:10.5px;font-weight:700;border-radius:6px;padding:2px 7px}
+.bdg.est{background:var(--lilas);color:var(--roxo)}
+.bdg.noest{background:#FBEAEA;color:var(--danger)}
+.bdg.nlm{background:#E2F5EC;color:var(--ok)}
+.bdg.doc{background:#FFF3DD;color:#A06B00}
+.bdg.cls{background:var(--cinza);color:var(--muted)}
+.bdg.stat{background:#E6EDF7;color:var(--navy)}
+
+/* ── Drawer ── */
+.overlay{position:fixed;inset:0;background:rgba(12,35,64,.45);z-index:50;display:none}
+.overlay.open{display:block}
+.drawer{position:fixed;top:0;right:-100vw;width:100vw;height:100vh;background:var(--cinza);z-index:60;box-shadow:-6px 0 24px rgba(0,0,0,.25);transition:right .25s ease;display:flex;flex-direction:column}
+.drawer.open{right:0}
+.dhead{background:var(--navy);color:#fff;padding:14px 18px}
+.dhead .did{font-size:12px;opacity:.8;font-weight:700}
+.dhead input.dtitle{width:100%;background:transparent;border:none;border-bottom:1px dashed #3A5578;color:#fff;font-size:16px;font-weight:700;padding:4px 0;margin-top:2px}
+.dhead .drow{display:flex;gap:8px;margin-top:10px;flex-wrap:wrap;align-items:center}
+.dhead select,.dhead input[type=date]{background:#1A3558;color:#fff;border:none;border-radius:7px;padding:6px 9px;font-size:12px}
+.dbody{flex:1;overflow-y:auto;padding:20px 26px 110px;display:grid;grid-template-columns:repeat(3,1fr);gap:0 26px;align-content:start}
+.dcol{min-width:0}
+.full{grid-column:1/-1}
+@media(max-width:1200px){.dbody{grid-template-columns:repeat(2,1fr)}}
+@media(max-width:760px){.dbody{grid-template-columns:1fr}}
+.sec{margin-bottom:18px}
+.sec>h4{font-size:11.5px;text-transform:uppercase;letter-spacing:1px;color:var(--roxo);margin-bottom:8px;display:flex;align-items:center;gap:7px}
+.sec>h4 .ln{flex:1;height:1px;background:var(--lilas)}
+.panel{background:var(--cinza);border-radius:10px;padding:12px}
+.kv{display:grid;grid-template-columns:130px 1fr;gap:4px 10px;font-size:12.5px}
+.kv dt{color:var(--muted)}
+.kv dd{font-weight:600}
+.desc{width:100%;min-height:150px;max-height:380px;overflow-y:auto;border:1px solid #D8D8E4;border-radius:8px;padding:10px 12px;background:#fff;font-size:13px;line-height:1.5}
+.desc:focus{outline:2px solid var(--roxo);outline-offset:-1px}
+.desc:empty::before{content:attr(data-ph);color:var(--muted)}
+.clschips{display:flex;gap:7px;flex-wrap:wrap}
+.estrow{display:flex;gap:8px;align-items:center;flex-wrap:wrap}
+.estrow input[type=number]{width:90px;border:1.5px solid var(--roxo);border-radius:8px;padding:8px;font-size:15px;font-weight:700;color:var(--roxo)}
+.qbtn{background:#fff;border:1px solid #D8D8E4;border-radius:7px;padding:6px 10px;font-size:12px;font-weight:600}
+.qbtn:hover{border-color:var(--roxo);color:var(--roxo)}
+.nlmbox{background:#F4FBF7;border:1px solid #CBEBDB;border-radius:10px;padding:14px;font-size:13px;line-height:1.55;max-height:calc(100vh - 270px);overflow-y:auto;margin-bottom:10px}
+.tecbox{background:var(--lilas);border:1px solid #C9C0FF;border-radius:10px;padding:14px;font-size:13px;line-height:1.55;max-height:340px;overflow-y:auto;margin-top:10px}
+.tecbox .tmeta{font-size:11px;color:var(--roxo);font-weight:700;margin-bottom:6px}
+.nlmbox div{margin-bottom:4px}
+.docitem{display:flex;align-items:center;gap:8px;background:#fff;border:1px solid #EEE;border-radius:8px;padding:8px 10px;margin-bottom:6px;text-decoration:none;color:var(--ink);font-size:12.5px;font-weight:600}
+.docitem:hover{border-color:var(--roxo)}
+.tagrow{display:flex;gap:6px;flex-wrap:wrap}
+.tagpill{background:var(--lilas);color:var(--roxo);border-radius:14px;padding:4px 10px;font-size:12px;font-weight:700;display:flex;align-items:center;gap:6px}
+.tagpill b{cursor:pointer;opacity:.6}
+.tagpill b:hover{opacity:1}
+.addtag{display:flex;gap:6px;margin-top:8px}
+.addtag input{flex:1;border:1px solid #D8D8E4;border-radius:8px;padding:7px 10px}
+.hist{font-size:12px;border-left:3px solid var(--lilas);padding-left:10px;margin-bottom:10px}
+.hist .hmeta{color:var(--muted);font-size:11px;margin-bottom:2px}
+.hist .hbody{line-height:1.45;max-height:120px;overflow:hidden}
+.hist.expand .hbody{max-height:none}
+.dfoot{position:absolute;bottom:0;left:0;right:0;background:#fff;border-top:1px solid #EEE;padding:12px 18px;display:flex;gap:10px;align-items:center}
+.dfoot .status-msg{flex:1;font-size:12px;color:var(--muted)}
+/* ── Console de ações (1-a-1) ── */
+.amodal-bg{position:fixed;inset:0;background:rgba(12,35,64,.55);z-index:80;display:none;align-items:flex-start;justify-content:center;padding:40px 16px}
+.amodal-bg.open{display:flex}
+.amodal{background:#fff;border-radius:14px;width:680px;max-width:96vw;max-height:86vh;overflow-y:auto;box-shadow:0 12px 40px rgba(0,0,0,.35)}
+.amodal .ahead{background:var(--navy);color:#fff;padding:14px 18px;border-radius:14px 14px 0 0;position:sticky;top:0}
+.amodal .ahead .at{font-size:15px;font-weight:700}
+.amodal .ahead .as{font-size:11.5px;opacity:.75;margin-top:2px}
+.amodal .ahead .ax{position:absolute;right:14px;top:12px;background:transparent;border:none;color:#fff;font-size:18px}
+.agroup{padding:12px 18px 4px;font-size:11px;font-weight:800;letter-spacing:1px;color:var(--roxo)}
+.arow{display:flex;align-items:center;gap:12px;margin:0 14px 8px;padding:11px 13px;border:1px solid #E4E4EE;border-radius:10px;cursor:pointer}
+.arow:hover{border-color:var(--roxo);background:var(--lilas)}
+.arow .aic{font-size:18px}
+.arow .atx{flex:1}
+.arow .atx b{display:block;font-size:13px}
+.arow .atx span{font-size:11.5px;color:var(--muted)}
+.abdg{font-size:10px;font-weight:800;border-radius:6px;padding:3px 8px}
+.abdg.live{background:#E2F5EC;color:var(--ok)}
+.abdg.off{background:#FBEAEA;color:var(--danger)}
+.abdg.tela{background:var(--lilas);color:var(--roxo)}
+.aform{margin:0 14px 12px;padding:12px;border:1px solid #E4E4EE;border-radius:10px;display:none}
+.aform.open{display:block}
+.aform textarea{width:100%;min-height:90px;border:1px solid #D8D8E4;border-radius:8px;padding:9px;resize:vertical}
+.aform .afrow{display:flex;gap:8px;margin-top:8px;align-items:center}
+.toast{position:fixed;bottom:22px;left:50%;transform:translateX(-50%);background:var(--navy);color:#fff;border-radius:10px;padding:11px 22px;font-weight:600;z-index:99;opacity:0;transition:opacity .25s}
+.toast.show{opacity:1}
+.toast.ok{background:var(--ok)} .toast.err{background:var(--danger)}
+.loading{color:var(--muted);font-size:12.5px;padding:8px}
+footer{padding:18px;text-align:center;color:var(--muted);font-size:11px}
+footer b{color:var(--navy)}
+@media(max-width:1100px){.board{grid-template-columns:repeat(2,1fr)}}
+@media(max-width:640px){.board{grid-template-columns:1fr}}
+</style>
+
+<script src="supabase-data.js"></script>
+<script src="supabase-compat.js"></script>
+</head>
+<body>
+
+<header>
+  <div class="brand">TOTVS · SANTA CATARINA<small>TOMADA DE DECISÃO DE GAPS — ESTIMATIVA INDIVIDUALIZADA</small></div>
+  <select id="selCliente" title="Cliente"></select>
+  <input type="search" id="txtBusca" placeholder="🔎 Buscar em nº, título, descrição, tags, NotebookLM, histórico…">
+  <div class="spacer"></div>
+  <span id="lblAtualizado" style="font-size:11px;opacity:.7"></span>
+  <a class="btn btn-roxo" href="/gaps-reuniao.html" style="text-decoration:none" title="Tela de reunião de decisão com o cliente">🤝 Reunião de decisão</a>
+  <button class="btn btn-ghost" id="btnRefresh" title="Rebusca os tickets na API Tasks SC (roda clientes.py)">⟳ Atualizar dados</button>
+</header>
+
+<div class="kpis" id="kpis"></div>
+
+<div class="filters" id="filters">
+  <span style="font-size:12px;color:var(--muted);font-weight:700">ETAPA:</span>
+  <button class="chip on" data-etapa="GAP">GAP</button>
+  <button class="chip on" data-etapa="LEVANTAR REQUISITOS">Levantar Requisitos</button>
+  <button class="chip on" data-etapa="LEVANTAMENTO">Levantamento</button>
+  <button class="chip on" data-etapa="ORCAMENTO PENDENTE">Orçamento Pendente</button>
+  <span class="sep"></span>
+  <span style="font-size:12px;color:var(--muted);font-weight:700">CLASSIFICAÇÃO:</span>
+  <button class="chip cls" data-cls="NECESSARIO">Necessário</button>
+  <button class="chip cls" data-cls="DESEJAVEL">Desejável</button>
+  <button class="chip cls" data-cls="INDEFINIDO">Indefinido</button>
+  <button class="chip cls" data-cls="OPCIONAL">Opcional</button>
+  <button class="chip cls" data-cls="PRIORIDADE">Prioridade</button>
+  <span class="sep"></span>
+  <div class="tagfilter" id="tagFilter">
+    <button class="chip" id="tagFilterBtn" type="button">🏷️ Tags <span id="tagFilterCount"></span> ▾</button>
+    <div class="tagfilter-pop" id="tagFilterPop">
+      <div class="tfp-head">
+        <input type="search" id="tagFilterSearch" placeholder="filtrar tags…">
+        <button class="tfp-clear" id="tagFilterClear">limpar</button>
+      </div>
+      <div class="tfp-list" id="tagFilterList"></div>
+      <div class="tfp-foot"><label><input type="radio" name="tfmode" value="and" checked> contém todas</label><label><input type="radio" name="tfmode" value="or"> contém qualquer</label></div>
+    </div>
+  </div>
+  <button class="chip" id="chipPendCons" data-onlypendcons>⏸ Pendente Consultoria</button>
+  <button class="chip" id="chipSemEst" data-onlysemest>⏱ Sem estimativa</button>
+  <label><input type="checkbox" id="chkClosed"> mostrar resolvidos/cancelados</label>
+</div>
+
+<div class="board" id="board"></div>
+<footer><b>totvs.com</b> · Gaps — Tomada de Decisão · dados Tasks SC + NotebookLM + Drive</footer>
+
+<div class="overlay" id="overlay" onclick="closeDrawer()"></div>
+<div class="drawer" id="drawer">
+  <div class="dhead">
+    <div class="did" id="dId"></div>
+    <input class="dtitle" id="dTitle" title="Título (editável)">
+    <div class="drow">
+      <select id="dStatus"></select>
+      <input type="date" id="dDue" title="Vencimento">
+      <span style="font-size:11px;opacity:.75" id="dMeta"></span>
+      <span style="flex:1"></span>
+      <span class="status-msg" id="dMsg" style="font-size:11px;opacity:.85;margin-right:6px"></span>
+      <button class="btn btn-ghost" id="btnSync" title="Buscar atualização na API agora (tags, descrição, estimativa, NotebookLM, histórico e docs do Drive)">🔄 Sincronizar</button>
+      <button class="btn btn-roxo" id="btnAcoes">⚡ Ações</button>
+      <button class="btn btn-roxo" id="btnSalvar">💾 Salvar</button>
+      <button class="btn btn-ghost" onclick="closeDrawer()">Fechar</button>
+    </div>
+  </div>
+  <div class="dbody" id="dBody"></div>
+</div>
+<div class="amodal-bg" id="amodalBg" onclick="if(event.target===this)closeAcoes()">
+  <div class="amodal">
+    <div class="ahead">
+      <div class="at" id="aTitle">Ações</div>
+      <div class="as" id="aSub"></div>
+      <button class="ax" onclick="closeAcoes()">✕</button>
+    </div>
+    <div id="aBody"></div>
+  </div>
+</div>
+<div class="toast" id="toast"></div>
+
+<script>
+"use strict";
+/* ════════════════ Estado ════════════════ */
+const ETAPAS = ["GAP","LEVANTAR REQUISITOS","LEVANTAMENTO","ORCAMENTO PENDENTE"];
+const CLASSES = ["NECESSARIO","DESEJAVEL","INDEFINIDO","OPCIONAL","PRIORIDADE"];
+const STATUS = {"001":"Novo","002":"Aberto","003":"Agendado","004":"Em Andamento","005":"Em Validação","006":"Resolvido","009":"Cancelado","010":"Em Validação (Cliente)"};
+const CLOSED = new Set(["006","009"]);
+const COLS = [
+  {key:"levantar", titulo:"📋 Levantar Requisitos", desc:"requisitos pendentes"},
+  {key:"orcamento", titulo:"💰 Orçamento Pendente", desc:"aguardando orçamento"},
+  {key:"analise",  titulo:"🔍 Em Análise", desc:"sem estimativa definida"},
+  {key:"estimado", titulo:"✅ Estimado / Decidido", desc:"com estimativa"},
+];
+
+let clienteAtual = "digitro";
+let tickets = [];          // tickets do cliente
+let driveIdx = {};         // drive_index.json
+let nlmCache = {};         // uuid → {count, entries}
+let tecCache = {};         // uuid → [entries PERSONALIZACAO:] (mais recente primeiro)
+let detailCache = {};      // uuid → ticket detail (description)
+let histCache = {};        // uuid → items
+let tagCatalog = [];       // [{id,tag}]
+let etapasOn = new Set(ETAPAS);
+let clsOn = new Set();     // vazio = todas
+let busca = "", showClosed = false, onlySemEst = false, onlyPendCons = false;
+let tagFilterSel = new Set();   // tags selecionadas no filtro múltiplo
+let tagFilterMode = "and";      // "and" = contém todas · "or" = contém qualquer
+const PEND_CONS_TAG = "PENDENCIA CONSULTOR";
+let openUuid = null;
+
+const $ = s => document.querySelector(s);
+const esc = s => (s||"").replace(/[&<>"]/g, c => ({"&":"&amp;","<":"&lt;",">":"&gt;",'"':"&quot;"}[c]));
+
+function toast(msg, cls){ const t=$("#toast"); t.textContent=msg; t.className="toast show "+(cls||""); setTimeout(()=>t.className="toast",2600); }
+const GAPS_BASE = "/gaps"; // rotas próprias do Gaps vivem sob /gaps na 8082 (gmail vai direto ao backend unificado)
+function _gapsURL(path){ return path.indexOf("/api/gmail/")===0 ? path : (GAPS_BASE + path); }
+async function api(path, opts){ const r = await fetch(_gapsURL(path), opts); const j = await r.json().catch(()=>({ok:false,error:"resposta inválida"})); if(!r.ok || j.ok===false) throw new Error(j.error||("HTTP "+r.status)); return j; }
+
+/* ════════════════ Carga inicial ════════════════ */
+async function init(){
+  try{
+    const [cls, didx] = await Promise.all([api("/api/clientes"), api("/api/drive-index")]);
+    driveIdx = didx.clientes || {};
+    const sel = $("#selCliente");
+    sel.innerHTML = (cls.clientes||[]).map(c=>`<option value="${c.chave}" data-cmd="${esc(c.cmd||"")}" ${c.chave===clienteAtual?"selected":""}>${esc(c.nome)}</option>`).join("");
+    sel.onchange = () => { clienteAtual = sel.value; loadTickets(); };
+  }catch(e){ toast("Falha ao carregar clientes: "+e.message,"err"); }
+  loadTickets();
+  api("/api/tags-catalog").then(j=>{ tagCatalog=j.items||[]; fillTagDatalist(); }).catch(()=>{});
+}
+
+async function loadTickets(){
+  $("#board").innerHTML = `<div class="loading">Carregando tickets de ${clienteAtual}…</div>`;
+  try{
+    const j = await api("/api/tickets?cliente="+encodeURIComponent(clienteAtual));
+    tickets = j.tickets||[];
+    $("#lblAtualizado").textContent = "dados de "+(j.atualizado_em||"—");
+    nlmCache = {}; detailCache = {}; histCache = {}; tecCache = {}; _descPrefetched = false;
+    render();
+    prefetchNlm();
+  }catch(e){ $("#board").innerHTML=""; toast("Erro: "+e.message,"err"); }
+}
+
+/* ════════════════ Classificação dos cards ════════════════ */
+const tagsOf = t => (t.tags||[]).map(x=>String(x).toUpperCase());
+const isFoco = t => tagsOf(t).some(tg=>ETAPAS.includes(tg));
+const classeOf = t => CLASSES.find(c=>tagsOf(t).includes(c)) || "";
+function colOf(t){
+  const tg = tagsOf(t);
+  if(tg.includes("LEVANTAR REQUISITOS")||tg.includes("LEVANTAMENTO")) return "levantar";
+  if(tg.includes("ORCAMENTO PENDENTE")) return "orcamento";
+  if(Number(t.time_estimate)>0) return "estimado";
+  return "analise";
+}
+function visiveis(){
+  return tickets.filter(t=>{
+    if(!isFoco(t)) return false;
+    if(!showClosed && CLOSED.has(t.status)) return false;
+    if(![...etapasOn].some(e=>tagsOf(t).includes(e))) return false;
+    if(clsOn.size && !CLASSES.some(c=>clsOn.has(c)&&tagsOf(t).includes(c))) return false;
+    if(onlySemEst && Number(t.time_estimate)>0) return false;
+    if(onlyPendCons && !tagsOf(t).includes(PEND_CONS_TAG)) return false;
+    if(tagFilterSel.size){
+      const tg = tagsOf(t);
+      const ok = tagFilterMode==="or"
+        ? [...tagFilterSel].some(x=>tg.includes(x))
+        : [...tagFilterSel].every(x=>tg.includes(x));
+      if(!ok) return false;
+    }
+    if(busca){
+      const terms = busca.toLowerCase().split(/\s+/).filter(Boolean);
+      const hay = haystack(t);
+      if(!terms.every(q=>hay.includes(q))) return false;   // AND entre palavras
+    }
+    return true;
+  });
+}
+
+// Monta o texto pesquisável do ticket: nº, título, tags, todos os campos de
+// texto da lista + descrição/NotebookLM/especificação/histórico já carregados.
+function haystack(t){
+  const parts = [
+    t.id, t.title, (t.tags||[]).join(" "),
+    t.service_description, t.activity_description, t.project_description,
+    t.user_assigned_description, t.assigned_customer_description,
+    t.status_description, t.milestone, t.ticket_customer, t.ticket_totvs, t.issue_totvs,
+    t.customer_name, t.open_user_description, t.update_user,
+  ];
+  const det = detailCache[t.uuid];
+  if(det && det.description) parts.push(stripHtml(det.description));
+  (nlmCache[t.uuid]?.entries||[]).forEach(e=>parts.push(stripHtml(e.details||"")));
+  (tecCache[t.uuid]||[]).forEach(e=>parts.push(stripHtml(e.details||"")));
+  (histCache[t.uuid]||[]).forEach(e=>parts.push(stripHtml(e.details||"")));
+  return parts.filter(Boolean).join("  ").toLowerCase();
+}
+function stripHtml(s){ return String(s||"").replace(/<[^>]+>/g," ").replace(/&nbsp;/g," "); }
+
+/* ════════════════ Render ════════════════ */
+function render(){
+  const vis = visiveis();
+  // KPIs
+  const abertos = vis.filter(t=>!CLOSED.has(t.status));
+  const semEst = abertos.filter(t=>!(Number(t.time_estimate)>0));
+  const horas = vis.reduce((s,t)=>s+(Number(t.time_estimate)||0),0);
+  const orc = abertos.filter(t=>tagsOf(t).includes("ORCAMENTO PENDENTE"));
+  const comNlm = vis.filter(t=>nlmCache[t.uuid]?.count>0);
+  $("#kpis").innerHTML = `
+    <div class="kpi hero"><div class="num">${vis.length}</div><div class="lbl">Gaps no radar</div></div>
+    <div class="kpi"><div class="num" style="color:var(--danger)">${semEst.length}</div><div class="lbl">Sem estimativa</div></div>
+    <div class="kpi"><div class="num">${horas}h</div><div class="lbl">Horas estimadas</div></div>
+    <div class="kpi"><div class="num" style="color:var(--ok)">${comNlm.length}</div><div class="lbl">Com análise NotebookLM</div></div>
+    <div class="kpi"><div class="num" style="color:var(--warn)">${orc.length}</div><div class="lbl">Orçamento pendente</div></div>`;
+  // Board
+  const byCol = {levantar:[],orcamento:[],analise:[],estimado:[]};
+  vis.forEach(t=>byCol[colOf(t)].push(t));
+  $("#board").innerHTML = COLS.map(c=>`
+    <div class="col" data-col="${c.key}" ondragover="event.preventDefault();this.classList.add('dragover')"
+         ondragleave="this.classList.remove('dragover')" ondrop="onDrop(event,'${c.key}')">
+      <h3>${c.titulo} <span class="cnt">${byCol[c.key].length}</span></h3>
+      ${byCol[c.key].map(cardHtml).join("")||`<div class="loading">— vazio —</div>`}
+    </div>`).join("");
+}
+
+function cardHtml(t){
+  const cls = classeOf(t);
+  const est = Number(t.time_estimate)||0;
+  const nlm = nlmCache[t.uuid];
+  const docs = (driveIdx[clienteAtual]?.por_task||{})[t.id];
+  const closed = CLOSED.has(t.status);
+  return `<div class="card ${cls} ${closed?"closed":""}" draggable="true"
+       ondragstart="event.dataTransfer.setData('text/plain','${t.uuid}')"
+       onclick="openDrawer('${t.uuid}')">
+    <div class="cid">#${t.id} · ${esc(t.status_description||STATUS[t.status]||"")}</div>
+    <div class="ctitle">${esc(t.title||"")}</div>
+    <div class="badges">
+      ${est>0?`<span class="bdg est">⏱ ${est}h</span>`:`<span class="bdg noest">sem estimativa</span>`}
+      ${cls?`<span class="bdg cls">${cls}</span>`:""}
+      ${nlm===undefined?"":(nlm.count>0?`<span class="bdg nlm">📖 NLM ✓</span>`:"")}
+      ${docs?`<span class="bdg doc">📄 Drive</span>`:""}
+    </div></div>`;
+}
+
+/* ════════════════ Prefetch NotebookLM (fila, 2 por vez) ════════════════ */
+async function prefetchNlm(){
+  const alvo = visiveis().filter(t=>nlmCache[t.uuid]===undefined);
+  let i=0;
+  async function worker(){
+    while(i<alvo.length){
+      const t = alvo[i++];
+      try{
+        const j = await api(`/api/ticket/${t.uuid}/history`);
+        nlmCache[t.uuid] = {count:(j.nlm||[]).length, entries:j.nlm||[]};
+        tecCache[t.uuid] = j.tec||[];
+        histCache[t.uuid] = j.items||[];
+      }catch(e){ nlmCache[t.uuid]={count:0,entries:[]}; }
+    }
+  }
+  await Promise.all([worker(),worker()]);
+  render();
+  prefetchDescricoes();   // descrições em 2º plano p/ a busca cobri-las
+}
+
+// Carrega descrições de todos os Gaps no radar em segundo plano (fila leve),
+// re-renderizando só se houver uma busca ativa (pra revelar novos matches).
+let _descPrefetched = false;
+async function prefetchDescricoes(){
+  if(_descPrefetched) return; _descPrefetched = true;
+  const alvo = tickets.filter(t=>isFoco(t) && detailCache[t.uuid]===undefined);
+  let i=0;
+  async function worker(){
+    while(i<alvo.length){
+      const t = alvo[i++];
+      try{ const j = await api(`/api/ticket/${t.uuid}`); detailCache[t.uuid] = j.ticket||{}; }
+      catch(e){ detailCache[t.uuid] = {}; }
+      if(busca && i%4===0) render();   // revela matches gradualmente durante busca
+    }
+  }
+  await Promise.all([worker(),worker(),worker()]);
+  if(busca) render();
+}
+
+/* ════════════════ Drag & drop (gestão ágil de tags) ════════════════ */
+const DROP_RULES = {
+  levantar:{add:["LEVANTAR REQUISITOS"],remove:["ORCAMENTO PENDENTE"]},
+  orcamento:{add:["ORCAMENTO PENDENTE"],remove:["LEVANTAR REQUISITOS","LEVANTAMENTO"]},
+  analise:{add:[],remove:["LEVANTAR REQUISITOS","LEVANTAMENTO","ORCAMENTO PENDENTE"]},
+  estimado:{add:[],remove:["ORCAMENTO PENDENTE"]},
+};
+async function onDrop(ev, col){
+  ev.preventDefault();
+  document.querySelectorAll(".col").forEach(c=>c.classList.remove("dragover"));
+  const uuid = ev.dataTransfer.getData("text/plain");
+  const t = tickets.find(x=>x.uuid===uuid); if(!t) return;
+  if(colOf(t)===col) return;
+  const r = DROP_RULES[col];
+  let novas = (t.tags||[]).filter(tg=>!r.remove.includes(String(tg).toUpperCase()));
+  r.add.forEach(a=>{ if(!novas.map(x=>x.toUpperCase()).includes(a)) novas.push(a); });
+  let est = null;
+  if(col==="estimado" && !(Number(t.time_estimate)>0)){
+    est = prompt(`Mover #${t.id} para Estimado — informe a estimativa (horas):`,"8");
+    if(est===null) return;
+    est = parseInt(est,10);
+    if(!(est>0)) { toast("Estimativa inválida.","err"); return; }
+  }
+  if(!confirm(`Mover #${t.id} para "${COLS.find(c=>c.key===col).titulo}"?\nTags: ${novas.join(", ")}${est?`\nEstimativa: ${est}h`:""}`)) return;
+  try{
+    const changes = {tags:novas}; if(est) changes.time_estimate = est;
+    await api(`/api/ticket/${uuid}/update`,{method:"POST",headers:{"Content-Type":"application/json"},body:JSON.stringify(changes)});
+    t.tags = novas; if(est) t.time_estimate = est;
+    render(); toast(`#${t.id} movido ✓`,"ok");
+  }catch(e){ toast("Falha ao mover: "+e.message,"err"); }
+}
+
+/* ════════════════ Drawer (painel de decisão) ════════════════ */
+async function openDrawer(uuid){
+  openUuid = uuid;
+  const t = tickets.find(x=>x.uuid===uuid); if(!t) return;
+  $("#overlay").classList.add("open"); $("#drawer").classList.add("open");
+  $("#dId").textContent = `#${t.id} · ${esc(t.project_description||"")} · aberto em ${fmtData(t.open_date)}`;
+  $("#dTitle").value = t.title||"";
+  $("#dStatus").innerHTML = Object.entries(STATUS).map(([k,v])=>`<option value="${k}" ${k===t.status?"selected":""}>${v}</option>`).join("");
+  $("#dDue").value = isoDate(t.due_date);
+  $("#dMeta").textContent = `resp.: ${t.user_assigned_description||"—"}`;
+  $("#dMsg").textContent = "";
+  $("#btnAcoes").onclick = openAcoes;
+  const bs=$("#btnSync"); bs.disabled=false; bs.textContent="🔄 Sincronizar"; bs.onclick=()=>syncDrawer();
+  $("#dBody").innerHTML = bodyHtml(t);
+  bindBody(t);
+  if(tecCache[t.uuid]!==undefined) fillTec(t);   // prefetch já trouxe — pré-carrega
+  // carrega detalhe (descrição) + histórico/NLM live
+  loadDetail(t); loadNlm(t);
+}
+function closeDrawer(){ $("#overlay").classList.remove("open"); $("#drawer").classList.remove("open"); openUuid=null; }
+
+function bodyHtml(t){
+  const est = Number(t.time_estimate)||0;
+  const docs = (driveIdx[clienteAtual]?.por_task||{})[t.id]||[];
+  const gerais = driveIdx[clienteAtual]?.docs_gerais||[];
+  const pasta = driveIdx[clienteAtual]?.pasta_cliente;
+  return `
+  <div class="dcol">
+    <div class="sec"><h4>Resumo do ticket <span class="ln"></span></h4>
+      <div class="panel"><dl class="kv">
+        <dt>Status</dt><dd>${esc(t.status_description||"")}</dd>
+        <dt>Serviço</dt><dd>${esc(t.service_description||"—")}</dd>
+        <dt>Atividade</dt><dd>${esc(t.activity_description||"—")}</dd>
+        <dt>Resp. interno</dt><dd>${esc(t.user_assigned_description||"—")}</dd>
+        <dt>Resp. cliente</dt><dd>${esc(t.assigned_customer_description||"—")}</dd>
+        <dt>Última atualização</dt><dd>${fmtData(t.update_date)} ${esc(t.update_time||"")}</dd>
+        <dt>Horas apontadas</dt><dd>${t.time_spent||0}h</dd>
+      </dl></div>
+    </div>
+    <div class="sec"><h4>Descrição <span class="ln"></span></h4>
+      <div class="desc" id="dDesc" contenteditable="true" data-ph="Carregando descrição…"></div>
+      <div style="display:flex;justify-content:flex-end;margin-top:7px">
+        <button class="btn btn-roxo" id="btnDesc">💾 Atualizar descrição</button>
+      </div>
+    </div>
+    <div class="sec"><h4>Documentação no Drive <span class="ln"></span></h4>
+      <div id="dDocs">
+        ${docs.map(d=>`<a class="docitem" href="${d.url}" target="_blank">${d.tipo==="pdf"?"📕":d.tipo==="spreadsheet"?"📗":"📘"} ${esc(d.title)}</a>`).join("")}
+        ${docs.length?"":`<div class="loading">Nenhum documento indexado para a task ${t.id}.</div>`}
+        <div id="dDocsExtra"></div>
+        ${gerais.map(d=>`<a class="docitem" href="${d.url}" target="_blank" style="opacity:.8">📗 ${esc(d.title)}</a>`).join("")}
+        <div style="display:flex;gap:8px;margin-top:6px;flex-wrap:wrap">
+          <a class="qbtn" style="text-decoration:none" target="_blank" href="https://drive.google.com/drive/search?q=${encodeURIComponent(t.id)}">🔎 Buscar "${t.id}" no Drive</a>
+          ${pasta?`<a class="qbtn" style="text-decoration:none" target="_blank" href="${pasta.url}">📁 Pasta do cliente</a>`:""}
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <div class="dcol">
+    <div class="sec"><h4>Classificação do Gap <span class="ln"></span></h4>
+      <div class="clschips" id="dCls">
+        ${CLASSES.map(c=>`<button class="chip cls ${tagsOf(t).includes(c)?"on":""}" data-c="${c}">${c}</button>`).join("")}
+      </div>
+      <div style="margin-top:8px">
+        <button class="chip" id="dPendCons" style="${tagsOf(t).includes(PEND_CONS_TAG)?"border-color:#A06B00;background:#FFF3DD;color:#A06B00":""}">⏸ Pendente Consultoria</button>
+      </div>
+    </div>
+    <div class="sec"><h4>Decisão &amp; Estimativa <span class="ln"></span></h4>
+      <div class="panel estrow">
+        <input type="number" id="dEst" min="0" step="1" value="${est||""}" placeholder="h">
+        <span style="font-size:12px;color:var(--muted)">horas</span>
+        ${[4,8,16,24,40].map(h=>`<button class="qbtn" onclick="$('#dEst').value=${h}">${h}h</button>`).join("")}
+        <button class="btn btn-roxo" id="btnEst" style="width:100%;margin-top:6px">Definir estimativa</button>
+      </div>
+    </div>
+    <div class="sec"><h4>Especificação Técnica da Personalização <span class="ln"></span></h4>
+      <div class="desc" id="dTec" contenteditable="true" data-ph="Descreva aqui a especificação técnica da personalização (o que customizar, rotinas, pontos de entrada, regras)…"></div>
+      <div style="display:flex;gap:8px;align-items:center;margin-top:7px">
+        <span id="dTecMeta" style="flex:1;font-size:11.5px;color:var(--muted)"></span>
+        <button class="btn btn-roxo" id="btnTec">📌 Gravar ocorrência interna</button>
+      </div>
+      <div id="dTecView"></div>
+    </div>
+    <div class="sec"><h4>Tags <span class="ln"></span></h4>
+      <div class="tagrow" id="dTags">${(t.tags||[]).map(tagPill).join("")}</div>
+      <div class="addtag">
+        <input id="dNewTag" list="tagOpts" placeholder="adicionar tag… (catálogo Tasks SC)">
+        <datalist id="tagOpts"></datalist>
+        <button class="qbtn" id="btnAddTag">+ adicionar</button>
+      </div>
+    </div>
+  </div>
+
+  <div class="dcol">
+    <div class="sec"><h4>Análise NotebookLM <span class="ln"></span>
+      <button class="qbtn" id="btnNlmReload" style="margin-left:auto">⟳</button></h4>
+      <div id="dNlm" class="loading">Buscando histórico NOTEBOOKLM…</div>
+    </div>
+    <div class="sec"><h4>Histórico do ticket <span class="ln"></span></h4>
+      <div id="dHist" class="loading">Carregando…</div>
+    </div>
+  </div>`;
+}
+const tagPill = tg => `<span class="tagpill" data-tag="${esc(tg)}">${esc(tg)} <b onclick="removeTag('${esc(tg)}')">✕</b></span>`;
+
+function bindBody(t){
+  fillTagDatalist();
+  // classificação: exclusiva — clicar troca
+  $("#dCls").querySelectorAll(".chip").forEach(ch=>{
+    ch.onclick = async ()=>{
+      const c = ch.dataset.c;
+      const atuais = tagsOf(t);
+      let novas = (t.tags||[]).filter(tg=>!CLASSES.includes(String(tg).toUpperCase()));
+      if(!atuais.includes(c)) novas.push(c);   // clicar na ativa = remove
+      await saveTags(t, novas, `classificação → ${c}`);
+      $("#dCls").querySelectorAll(".chip").forEach(x=>x.classList.toggle("on", tagsOf(t).includes(x.dataset.c)));
+    };
+  });
+  $("#btnEst").onclick = async ()=>{
+    const v = parseInt($("#dEst").value,10);
+    if(!(v>=0)) return toast("Informe as horas.","err");
+    await saveChanges(t, {time_estimate:v}, `estimativa ${v}h`);
+  };
+  $("#btnAddTag").onclick = async ()=>{
+    const v = $("#dNewTag").value.trim(); if(!v) return;
+    const novas = [...(t.tags||[])]; if(!novas.map(x=>x.toUpperCase()).includes(v.toUpperCase())) novas.push(v);
+    await saveTags(t, novas, `tag +${v}`); $("#dNewTag").value="";
+  };
+  $("#btnNlmReload").onclick = ()=>{ delete nlmCache[t.uuid]; delete histCache[t.uuid]; delete tecCache[t.uuid]; loadNlm(t,true); };
+  $("#dPendCons").onclick = async ()=>{
+    const tem = tagsOf(t).includes(PEND_CONS_TAG);
+    const novas = tem ? (t.tags||[]).filter(x=>String(x).toUpperCase()!==PEND_CONS_TAG)
+                      : [...(t.tags||[]), PEND_CONS_TAG];
+    await saveTags(t, novas, tem?`− ${PEND_CONS_TAG}`:`+ ${PEND_CONS_TAG}`);
+    const on = tagsOf(t).includes(PEND_CONS_TAG);
+    $("#dPendCons").style.cssText = on?"border-color:#A06B00;background:#FFF3DD;color:#A06B00":"";
+  };
+  $("#btnDesc").onclick = async ()=>{
+    const html = $("#dDesc").innerHTML;
+    const b = $("#btnDesc"); b.disabled = true; b.textContent = "⏳ Atualizando…";
+    await saveChanges(t, {description: html}, "descrição atualizada");
+    if(detailCache[t.uuid]) detailCache[t.uuid].description = html;
+    b.disabled = false; b.textContent = "💾 Atualizar descrição";
+  };
+  $("#btnTec").onclick = async ()=>{
+    const html = $("#dTec").innerHTML;
+    if(!html.replace(/<[^>]+>|&nbsp;|\s/g,"")) return toast("Escreva a especificação antes de gravar.","err");
+    const b = $("#btnTec"); b.disabled = true; b.textContent = "⏳ Gravando…";
+    try{
+      const j = await api(`/api/ticket/${t.uuid}/history`,{method:"POST",headers:{"Content-Type":"application/json"},body:JSON.stringify({body_html:html})});
+      // atualiza cache local: a versão recém-gravada vira a mais recente
+      tecCache[t.uuid] = [{details:j.details, date:"", time:"", user_name:"você"}, ...(tecCache[t.uuid]||[])];
+      delete histCache[t.uuid];   // força reler o histórico na próxima abertura
+      fillTec(t);
+      $("#dTecMeta").textContent = "Gravado como ocorrência interna às "+new Date().toLocaleTimeString("pt-BR");
+      toast(`#${t.id} — especificação gravada no histórico ✓`,"ok");
+    }catch(e){ toast("Falha ao gravar: "+e.message,"err"); }
+    b.disabled = false; b.textContent = "📌 Gravar ocorrência interna";
+  };
+  $("#btnSalvar").onclick = async ()=>{
+    const changes = {};
+    if($("#dTitle").value !== (t.title||"")) changes.title = $("#dTitle").value;
+    const desc = $("#dDesc").innerHTML;
+    if(detailCache[t.uuid] && desc !== (detailCache[t.uuid].description||"")) changes.description = desc;
+    if($("#dStatus").value !== t.status) changes.status = $("#dStatus").value;
+    const due = $("#dDue").value ? $("#dDue").value.replace(/-/g,"") : "";
+    if(due && due !== (t.due_date||"")) changes.due_date = due;
+    if(!Object.keys(changes).length) return toast("Nada a salvar.");
+    await saveChanges(t, changes, "edição da task");
+  };
+}
+
+async function saveTags(t, novas, label){ return saveChanges(t, {tags:novas}, label); }
+async function saveChanges(t, changes, label){
+  $("#dMsg").textContent = "Salvando…";
+  try{
+    await api(`/api/ticket/${t.uuid}/update`,{method:"POST",headers:{"Content-Type":"application/json"},body:JSON.stringify(changes)});
+    Object.assign(t, changes);
+    if(changes.status) t.status_description = STATUS[changes.status]||t.status_description;
+    if(changes.tags) $("#dTags").innerHTML = changes.tags.map(tagPill).join("");
+    $("#dMsg").textContent = "Salvo às "+new Date().toLocaleTimeString("pt-BR");
+    toast(`#${t.id} — ${label} ✓`,"ok"); render();
+  }catch(e){ $("#dMsg").textContent=""; toast("Falha: "+e.message,"err"); }
+}
+window.removeTag = async (tg)=>{
+  const t = tickets.find(x=>x.uuid===openUuid); if(!t) return;
+  if(!confirm(`Remover a tag "${tg}" do #${t.id}?`)) return;
+  await saveTags(t, (t.tags||[]).filter(x=>x!==tg), `tag −${tg}`);
+};
+
+// Pré-carrega a Especificação Técnica mais recente (marca PERSONALIZACAO:)
+// permitindo ajuste e regravação — sempre que o ticket for reaberto.
+function tecBody(details){
+  return (details||"")
+    .replace(/^\s*<div[^>]*>\s*<b>\s*PERSONALIZACAO:[\s\S]*?<\/div>\s*(<div[^>]*>(\s|&nbsp;|<br\s*\/?>)*<\/div>)?/i,"")
+    .trim();
+}
+function fillTec(t){
+  const el = $("#dTec"); if(!el) return;
+  const entries = tecCache[t.uuid]||[];
+  if(entries.length){
+    const e0 = entries[0];
+    if(!el.dataset.filled){ el.innerHTML = tecBody(e0.details); el.dataset.filled = "1"; }
+    const quando = e0.date ? `${fmtData(e0.date)} ${e0.time||""}` : "agora";
+    $("#dTecMeta").textContent = `Última versão: ${quando} · ${e0.user_name||""} · ${entries.length} versão(ões) no histórico`;
+    // quadro da versão gravada — mesmo estilo da Análise NotebookLM
+    $("#dTecView").innerHTML = `<div class="tecbox">
+      <div class="tmeta">📌 PERSONALIZAÇÃO — versão gravada ${quando!=="agora"?`em ${quando}`:"agora"} · ${esc(e0.user_name||"")}</div>
+      ${tecBody(e0.details)}</div>`;
+  } else {
+    $("#dTecMeta").textContent = "Nenhuma especificação gravada ainda neste ticket.";
+    $("#dTecView").innerHTML = "";
+  }
+}
+
+// Extrai links de documentos (Drive/Docs/Sheets/Slides) de um texto/HTML.
+function extractDocLinks(html){
+  const out = [], seen = new Set();
+  const re = /https?:\/\/(?:docs\.google\.com|drive\.google\.com)\/[^\s"'<>)]+/gi;
+  let m;
+  while((m = re.exec(html||""))){
+    let url = m[0].replace(/[.,;]+$/,"");
+    const base = url.split(/[?#]/)[0];
+    if(seen.has(base)) continue; seen.add(base);
+    let tipo = "doc", label = "Documento no Drive";
+    if(/\/document\//.test(url)){ tipo="doc"; label="Google Doc"; }
+    else if(/\/spreadsheets\//.test(url)){ tipo="spreadsheet"; label="Planilha"; }
+    else if(/\/presentation\//.test(url)){ tipo="doc"; label="Apresentação"; }
+    else if(/\/folders\//.test(url)){ tipo="folder"; label="Pasta no Drive"; }
+    else if(/\/file\//.test(url)){ tipo="pdf"; label="Arquivo no Drive"; }
+    out.push({url, tipo, title:label});
+  }
+  return out;
+}
+function docIcon(tp){ return tp==="pdf"?"📕":tp==="spreadsheet"?"📗":tp==="folder"?"📁":"📘"; }
+// Renderiza os links achados na descrição/histórico abaixo dos indexados.
+function renderDocsExtra(t){
+  const host = $("#dDocsExtra"); if(!host) return;
+  const idx = (driveIdx[clienteAtual]?.por_task||{})[t.id]||[];
+  const idxBases = new Set(idx.map(d=>d.url.split(/[?#]/)[0]));
+  let found = extractDocLinks(detailCache[t.uuid]?.description||"");
+  // também varre o histórico já carregado
+  (histCache[t.uuid]||[]).forEach(e=>{ found = found.concat(extractDocLinks(e.details||"")); });
+  const seen = new Set();
+  found = found.filter(d=>{ const b=d.url.split(/[?#]/)[0]; if(idxBases.has(b)||seen.has(b))return false; seen.add(b); return true; });
+  host.innerHTML = found.length
+    ? `<div style="font-size:11px;color:var(--muted);margin:6px 0 4px">🔗 detectados na descrição / histórico:</div>`
+      + found.map(d=>`<a class="docitem" href="${d.url}" target="_blank">${docIcon(d.tipo)} ${esc(d.title)}</a>`).join("")
+    : "";
+}
+
+// Sincroniza o ticket aberto com a API AGORA: rebusca detalhe (tags, descrição,
+// estimativa, status, vencimento) + histórico (NotebookLM, especificação,
+// ocorrências) e re-detecta documentação nova do Drive citada no texto atualizado.
+async function syncDrawer(){
+  const t = tickets.find(x=>x.uuid===openUuid); if(!t) return;
+  // protege edições não salvas
+  const descEdit = $("#dDesc") && $("#dDesc").innerHTML !== (detailCache[t.uuid]?.description||"");
+  const tecEl = $("#dTec"); const tecEdit = tecEl && tecEl.innerHTML.replace(/<[^>]+>|&nbsp;|\s/g,"") && !tecEl.dataset.filled;
+  if((descEdit||tecEdit) && !confirm("Sincronizar vai recarregar os dados da API e descartar edições não salvas (descrição/especificação). Continuar?")) return;
+  const b = $("#btnSync"); b.disabled = true; const old = b.textContent; b.textContent = "⏳ Sincronizando…";
+  $("#dMsg").textContent = "Buscando atualização na API…";
+  try{
+    const jd = await api(`/api/ticket/${t.uuid}`);
+    const fresh = jd.ticket || {};
+    // mescla campos relevantes no objeto do board (reflete no card também)
+    ["tags","time_estimate","time_spent","status","status_description","due_date",
+     "title","description","user_assigned_description","assigned_customer_description",
+     "service_description","activity_description","project_description",
+     "update_date","update_time","update_user","milestone","priority","progress"]
+      .forEach(k=>{ if(k in fresh) t[k]=fresh[k]; });
+    detailCache[t.uuid] = fresh;
+    // força releitura de histórico/NLM/especificação
+    delete nlmCache[t.uuid]; delete histCache[t.uuid]; delete tecCache[t.uuid];
+    // reconstrói o painel inteiro com os dados frescos (inclui Drive via renderDocsExtra)
+    openDrawer(t.uuid);
+    render();   // atualiza o board (badges, estimativa, tags)
+    $("#dMsg").textContent = "Sincronizado às " + new Date().toLocaleTimeString("pt-BR");
+    toast(`#${t.id} sincronizado com a API ✓`,"ok");
+  }catch(e){
+    $("#dMsg").textContent = "";
+    toast("Falha ao sincronizar: "+e.message,"err");
+    const bb=$("#btnSync"); if(bb){ bb.disabled=false; bb.textContent=old; }
+  }
+}
+
+async function loadDetail(t){
+  try{
+    if(!detailCache[t.uuid]){
+      const j = await api(`/api/ticket/${t.uuid}`);
+      detailCache[t.uuid] = j.ticket||{};
+    }
+    if(openUuid===t.uuid){ $("#dDesc").innerHTML = detailCache[t.uuid].description||""; renderDocsExtra(t); }
+    $("#dDesc").dataset.ph = "Sem descrição — escreva e salve.";
+  }catch(e){ $("#dDesc").dataset.ph = "Não foi possível carregar a descrição ("+e.message+")"; }
+}
+
+async function loadNlm(t, force){
+  const elN = $("#dNlm"), elH = $("#dHist");
+  try{
+    if(force || nlmCache[t.uuid]===undefined || histCache[t.uuid]===undefined){
+      const j = await api(`/api/ticket/${t.uuid}/history`);
+      nlmCache[t.uuid] = {count:(j.nlm||[]).length, entries:j.nlm||[]};
+      tecCache[t.uuid] = j.tec||[];
+      histCache[t.uuid] = j.items||[];
+    }
+    if(openUuid!==t.uuid) return;
+    fillTec(t);
+    renderDocsExtra(t);
+    const nlm = nlmCache[t.uuid];
+    elN.outerHTML = nlm.count
+      ? `<div id="dNlm">${nlm.entries.map(e=>`<div class="nlmbox"><div style="font-size:11px;color:var(--muted);margin-bottom:6px">${fmtData(e.date)} ${esc(e.time||"")} · ${esc(e.user_name||"")}</div>${e.details}</div>`).join("")}</div>`
+      : `<div id="dNlm" class="loading">Sem análise NotebookLM gravada neste Gap. Rode o pipeline de Integração NotebookLM para gerá-la.</div>`;
+    const tec = tecCache[t.uuid]||[];
+    const hist = (histCache[t.uuid]||[]).filter(e=>!nlm.entries.includes(e) && !tec.includes(e));
+    elH.outerHTML = hist.length
+      ? `<div id="dHist">${hist.slice(0,15).map(e=>`<div class="hist" onclick="this.classList.toggle('expand')"><div class="hmeta">${fmtData(e.date)} ${esc(e.time||"")} · ${esc(e.user_name||"")}</div><div class="hbody">${e.details||""}</div></div>`).join("")}${hist.length>15?`<div class="loading">… +${hist.length-15} entradas antigas</div>`:""}</div>`
+      : `<div id="dHist" class="loading">Sem histórico.</div>`;
+    render();
+  }catch(e){ if(openUuid===t.uuid) elN.outerHTML = `<div id="dNlm" class="loading">Erro lendo histórico: ${esc(e.message)}</div>`; }
+}
+
+/* ════════════════ Console de Ações (1-a-1) ════════════════ */
+let gmailLive = null;   // null=desconhecido, true/false
+async function checkGmail(){
+  if(gmailLive!==null) return gmailLive;
+  try{ const j = await fetch("/api/gmail/health").then(r=>r.json()); gmailLive = !!(j.ok && j.configured!==false); }
+  catch(e){ gmailLive = false; }
+  return gmailLive;
+}
+function openAcoes(){
+  const t = tickets.find(x=>x.uuid===openUuid); if(!t) return;
+  $("#aTitle").textContent = `⚡ Ações — Task #${t.id}`;
+  $("#aSub").textContent = t.title||"";
+  const live = b => `<span class="abdg ${b?"live":"off"}">${b?"● LIVE":"OFFLINE"}</span>`;
+  $("#aBody").innerHTML = `
+    <div class="agroup">📨 COMUNICAÇÃO ${gmailLive===false?'<span style="color:var(--danger)">(gmail_server :8081 offline)</span>':""}</div>
+    <div class="arow" onclick="acDraft('cobrar_cliente')"><span class="aic">📧</span>
+      <span class="atx"><b>Cobrar cliente — rascunho inteligente</b><span>Gera draft no Gmail com contexto da Task</span></span>${live(gmailLive)}</div>
+    <div class="arow" onclick="acDraft('confirmar_andamento')"><span class="aic">🤝</span>
+      <span class="atx"><b>Confirmar andamento com cliente</b><span>Pergunta se podemos seguir + anexa descrição da Task no corpo</span></span>${live(gmailLive)}</div>
+    <div class="arow" onclick="acDraft('cobrar_interno')"><span class="aic">📣</span>
+      <span class="atx"><b>Cobrar responsável interno</b><span>Para ${esc(t.user_assigned_description||"—")}</span></span>${live(gmailLive)}</div>
+
+    <div class="agroup">🔧 MUTAÇÃO NA TASK</div>
+    <div class="arow" onclick="acFoco('#dStatus')"><span class="aic">🔄</span>
+      <span class="atx"><b>Atualizar status</b><span>Atual: ${esc(t.status_description||"")}</span></span><span class="abdg tela">NA TELA</span></div>
+    <div class="arow" onclick="acFoco('#dNewTag')"><span class="aic">🏷️</span>
+      <span class="atx"><b>Adicionar / remover tag</b><span>${(t.tags||[]).length} tags atuais</span></span><span class="abdg tela">NA TELA</span></div>
+    <div class="arow" onclick="toggleHistForm()"><span class="aic">💬</span>
+      <span class="atx"><b>Adicionar Histórico</b><span>Entrada na aba Histórico (Externo/Interno)</span></span><span class="abdg live">● LIVE</span></div>
+    <div class="aform" id="aHistForm">
+      <textarea id="aHistText" placeholder="Texto da ocorrência…"></textarea>
+      <div class="afrow">
+        <select id="aHistType"><option value="1">Interno</option><option value="0">Externo</option></select>
+        <span style="flex:1"></span>
+        <button class="btn btn-roxo" onclick="acHist()">Gravar histórico</button>
+      </div>
+    </div>
+    <div class="arow" onclick="acFoco('#dDesc')"><span class="aic">✏️</span>
+      <span class="atx"><b>Editar descrição</b><span>Substitui o conteúdo atual da descrição</span></span><span class="abdg tela">NA TELA</span></div>
+    <div class="arow" onclick="acFoco('#dEst')"><span class="aic">⏱️</span>
+      <span class="atx"><b>Ajustar estimativa</b><span>Atual: ${Number(t.time_estimate)>0?t.time_estimate+"h":"não definida"}</span></span><span class="abdg tela">NA TELA</span></div>
+    <div class="arow" onclick="acFoco('#dTec')"><span class="aic">🛠️</span>
+      <span class="atx"><b>Especificação da personalização</b><span>Editor + gravação marcada PERSONALIZACAO:</span></span><span class="abdg tela">NA TELA</span></div>
+    <div class="arow" onclick="acFoco('#dDue')"><span class="aic">📅</span>
+      <span class="atx"><b>Replanejar vencimento</b><span>Atual: ${fmtData(t.due_date)}</span></span><span class="abdg tela">NA TELA</span></div>`;
+  $("#amodalBg").classList.add("open");
+  checkGmail().then(()=>{ if($("#amodalBg").classList.contains("open")) openAcoes._refreshed||(openAcoes._refreshed=1, openAcoes()); });
+}
+function closeAcoes(){ $("#amodalBg").classList.remove("open"); openAcoes._refreshed=0; }
+function toggleHistForm(){ $("#aHistForm").classList.toggle("open"); }
+function acFoco(sel){
+  closeAcoes();
+  const el = $(sel); if(!el) return;
+  el.scrollIntoView({behavior:"smooth", block:"center"});
+  setTimeout(()=>{ el.focus&&el.focus(); el.style.outline="3px solid var(--roxo)"; setTimeout(()=>el.style.outline="",1800); },350);
+}
+async function acHist(){
+  const t = tickets.find(x=>x.uuid===openUuid); if(!t) return;
+  const txt = $("#aHistText").value.trim();
+  if(!txt) return toast("Escreva o texto da ocorrência.","err");
+  try{
+    await api(`/api/ticket/${t.uuid}/history`,{method:"POST",headers:{"Content-Type":"application/json"},
+      body:JSON.stringify({body_html:"<p>"+esc(txt).replace(/\n/g,"<br>")+"</p>", raw:true, type:$("#aHistType").value})});
+    delete histCache[t.uuid];
+    toast(`#${t.id} — histórico gravado ✓`,"ok");
+    $("#aHistText").value=""; toggleHistForm();
+  }catch(e){ toast("Falha: "+e.message,"err"); }
+}
+function draftCtx(t, kind){
+  const desc = (detailCache[t.uuid]?.description)||"";
+  const linkDocs = ((driveIdx[clienteAtual]?.por_task||{})[t.id]||[]).map(d=>`<div><a href="${d.url}">${esc(d.title)}</a></div>`).join("");
+  const rod = `<br><div style="color:#666;font-size:12px">Task #${t.id} · ${esc(t.title||"")} · ${esc(t.customer_name||"")}</div>`;
+  if(kind==="cobrar_cliente") return {
+    subject:`[Task #${t.id}] ${t.title||""} — retorno necessário`,
+    bodyHtml:`<p>Olá,</p><p>Sobre o item <b>#${t.id} — ${esc(t.title||"")}</b>, precisamos de um retorno de vocês para dar sequência.</p><p>Podem nos atualizar sobre o andamento do lado de vocês?</p>${linkDocs?`<p><b>Documentação relacionada:</b></p>${linkDocs}`:""}<p>Obrigado!</p>${rod}`};
+  if(kind==="confirmar_andamento") return {
+    subject:`[Task #${t.id}] ${t.title||""} — podemos seguir?`,
+    bodyHtml:`<p>Olá,</p><p>Confirmando o andamento do item <b>#${t.id} — ${esc(t.title||"")}</b>. Podemos seguir conforme descrito abaixo?</p><blockquote style="border-left:3px solid #6F5BFF;padding-left:10px;color:#444">${desc||"<i>(sem descrição)</i>"}</blockquote><p>Aguardamos a confirmação.</p>${rod}`};
+  return {
+    subject:`[Task #${t.id}] ${t.title||""} — pendência interna`,
+    bodyHtml:`<p>Olá ${esc((t.user_assigned_description||"").split(" ")[0]||"")},</p><p>A Task <b>#${t.id} — ${esc(t.title||"")}</b> está aguardando sua ação (status: ${esc(t.status_description||"")}${Number(t.time_estimate)>0?", estimativa "+t.time_estimate+"h":", sem estimativa"}).</p><p>Consegue dar andamento ou me retornar a previsão?</p>${rod}`};
+}
+async function acDraft(kind){
+  const t = tickets.find(x=>x.uuid===openUuid); if(!t) return;
+  const d = draftCtx(t, kind);
+  try{
+    await api("/api/gmail/draft",{method:"POST",headers:{"Content-Type":"application/json"},
+      body:JSON.stringify({to:"", subject:d.subject, bodyHtml:d.bodyHtml})});
+    toast("Rascunho criado no Gmail ✓ — abra os Drafts para revisar e enviar","ok");
+    closeAcoes();
+  }catch(e){ toast("Falha criando rascunho: "+e.message,"err"); }
+}
+window.openAcoes=openAcoes; window.closeAcoes=closeAcoes; window.acFoco=acFoco;
+window.acHist=acHist; window.acDraft=acDraft; window.toggleHistForm=toggleHistForm;
+
+/* ════════════════ Filtros / util ════════════════ */
+function fillTagDatalist(){
+  const dl = $("#tagOpts"); if(!dl) return;
+  dl.innerHTML = tagCatalog.slice(0,500).map(x=>`<option value="${esc(x.tag)}">`).join("");
+}
+$("#filters").addEventListener("click", ev=>{
+  const b = ev.target.closest(".chip"); if(!b) return;
+  if(b.id === "tagFilterBtn") return;   // tratado pelo dropdown de tags
+  b.classList.toggle("on");
+  if(b.dataset.etapa){ b.classList.contains("on") ? etapasOn.add(b.dataset.etapa) : etapasOn.delete(b.dataset.etapa); }
+  if(b.dataset.cls){ b.classList.contains("on") ? clsOn.add(b.dataset.cls) : clsOn.delete(b.dataset.cls); }
+  if(b.hasAttribute("data-onlysemest")) onlySemEst = b.classList.contains("on");
+  if(b.hasAttribute("data-onlypendcons")) onlyPendCons = b.classList.contains("on");
+  render();
+});
+
+/* ── Filtro múltiplo de tags ── */
+function buildTagFilter(){
+  const cont = collectTagCounts();   // [{tag,count}] ordenado por count desc
+  const search = ($("#tagFilterSearch").value||"").trim().toUpperCase();
+  const list = $("#tagFilterList");
+  const shown = cont.filter(x=>!search || x.tag.toUpperCase().includes(search));
+  list.innerHTML = shown.map(x=>`
+    <label class="${tagFilterSel.has(x.tag)?"on":""}" data-tg="${esc(x.tag)}">
+      <input type="checkbox" ${tagFilterSel.has(x.tag)?"checked":""}> ${esc(x.tag)}
+      <span class="cnt">${x.count}</span>
+    </label>`).join("") || `<div style="padding:8px;color:var(--muted);font-size:12px">nenhuma tag</div>`;
+  list.querySelectorAll("label").forEach(l=>{
+    l.onclick = e=>{
+      e.preventDefault();
+      const tg = l.dataset.tg;
+      tagFilterSel.has(tg) ? tagFilterSel.delete(tg) : tagFilterSel.add(tg);
+      buildTagFilter(); updateTagFilterCount(); render();
+    };
+  });
+}
+function collectTagCounts(){
+  const m = new Map();
+  tickets.forEach(t=>{ if(!showClosed && CLOSED.has(t.status)) return; tagsOf(t).forEach(tg=>m.set(tg,(m.get(tg)||0)+1)); });
+  return [...m.entries()].map(([tag,count])=>({tag,count})).sort((a,b)=>b.count-a.count || a.tag.localeCompare(b.tag));
+}
+function updateTagFilterCount(){
+  const el = $("#tagFilterCount");
+  el.textContent = tagFilterSel.size ? tagFilterSel.size : "";
+  $("#tagFilterBtn").classList.toggle("on", tagFilterSel.size>0);
+}
+$("#tagFilterBtn").onclick = e=>{
+  e.stopPropagation();
+  const tf = $("#tagFilter"); const open = tf.classList.toggle("open");
+  if(open) buildTagFilter();
+};
+$("#tagFilterSearch").oninput = buildTagFilter;
+$("#tagFilterClear").onclick = ()=>{ tagFilterSel.clear(); buildTagFilter(); updateTagFilterCount(); render(); };
+document.querySelectorAll("input[name='tfmode']").forEach(r=>r.onchange=()=>{ tagFilterMode = document.querySelector("input[name='tfmode']:checked").value; render(); });
+document.addEventListener("click", e=>{ const tf=$("#tagFilter"); if(tf && !tf.contains(e.target)) tf.classList.remove("open"); });
+$("#chkClosed").onchange = e=>{ showClosed = e.target.checked; render(); };
+$("#txtBusca").oninput = e=>{ busca = e.target.value.trim(); render(); };
+$("#btnRefresh").onclick = async ()=>{
+  const b=$("#btnRefresh"); b.disabled=true; b.textContent="⏳ Atualizando…";
+  try{
+    const sel = $("#selCliente");
+    const cmd = sel.selectedOptions[0]?.dataset.cmd || clienteAtual.toUpperCase();
+    await api("/api/refresh?cliente="+encodeURIComponent(cmd),{method:"POST"});
+    toast("Dados atualizados da API Tasks SC ✓","ok"); await loadTickets();
+  }catch(e){ toast("Falha no refresh: "+e.message,"err"); }
+  b.disabled=false; b.textContent="⟳ Atualizar dados";
+};
+document.addEventListener("keydown", e=>{ if(e.key==="Escape"){ if($("#amodalBg").classList.contains("open")) closeAcoes(); else closeDrawer(); } });
+
+const fmtData = d => d && d.length===8 ? `${d.slice(6,8)}/${d.slice(4,6)}/${d.slice(0,4)}` : (d||"—");
+const isoDate = d => d && d.length===8 ? `${d.slice(0,4)}-${d.slice(4,6)}-${d.slice(6,8)}` : "";
+window.onDrop = onDrop; window.openDrawer = openDrawer; window.closeDrawer = closeDrawer;
+window.$ = $;
+
+init();
+</script>
+</body>
+</html>

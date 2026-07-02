@@ -1,0 +1,563 @@
+<!DOCTYPE html>
+<html lang="pt-BR">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width,initial-scale=1.0">
+<title>Reunião de Decisão de GAPs — TOTVS SC</title>
+<style>
+:root{
+  --navy:#0C2340; --roxo:#6F5BFF; --lilas:#E8E5FF; --cinza:#F4F4F8;
+  --gray:#6A6A7B; --gray-light:#9A9AAC; --ink:#2A2A35;
+  --approve:#1E9E6A; --phase2:#E8A33D; --workaround:#0099B5; --refuse:#D64550; --pending:#B9B9C8;
+  --grad:linear-gradient(135deg,#6F5BFF 0%,#0C2340 100%);
+  --font:-apple-system,"Segoe UI",Arial,sans-serif;
+}
+*{box-sizing:border-box;margin:0;padding:0}
+html,body{font-family:var(--font);background:#F4F6F8;color:var(--navy);line-height:1.5;min-height:100vh}
+button{font-family:inherit;cursor:pointer}
+
+/* TOPBAR */
+.topbar{position:sticky;top:0;z-index:100;background:var(--navy);color:#fff;border-bottom:3px solid;border-image:var(--grad) 1;box-shadow:0 4px 18px rgba(12,35,64,.18)}
+.topbar-inner{max-width:1500px;margin:0 auto;padding:12px 24px;display:flex;align-items:center;gap:20px;flex-wrap:wrap}
+.tb-brand{display:flex;align-items:center;gap:12px}
+.tb-logo{width:34px;height:34px;border-radius:8px;background:var(--grad);display:flex;align-items:center;justify-content:center;font-weight:800;font-size:13px;color:#fff}
+.tb-titles .t1{font-size:11px;letter-spacing:1.3px;text-transform:uppercase;color:var(--roxo);font-weight:700}
+.tb-titles .t2{font-size:14px;font-weight:600;margin-top:1px}
+.tb-titles .t3{font-size:11px;color:var(--gray-light);margin-top:1px}
+.tb-kpis{display:flex;gap:8px;flex:1;justify-content:flex-end;flex-wrap:wrap}
+.kpi-pill{background:rgba(255,255,255,.06);border:1px solid rgba(255,255,255,.10);border-radius:10px;padding:7px 13px;display:flex;flex-direction:column;gap:1px;min-width:92px;cursor:pointer;transition:all .15s;user-select:none}
+.kpi-pill:hover{background:rgba(255,255,255,.10);transform:translateY(-1px)}
+.kpi-pill.active{background:rgba(111,91,255,.20);border-color:var(--roxo)}
+.kpi-pill .lbl{font-size:9px;letter-spacing:.6px;text-transform:uppercase;color:var(--gray-light);font-weight:700}
+.kpi-pill .val{font-size:17px;font-weight:800;color:#fff;line-height:1}
+.kpi-pill .val .u{font-size:9px;color:var(--gray-light);font-weight:500;margin-left:2px}
+.kpi-pill .pct{font-size:9.5px;color:var(--gray-light);margin-top:1px}
+.kpi-pill.approve .val{color:#46D69E} .kpi-pill.phase2 .val{color:#FFC368}
+.kpi-pill.workaround .val{color:#5BD3FF} .kpi-pill.refuse .val{color:#FF7A88}
+.kpi-pill.pending .val{color:#E6E6F0}
+.tb-progress{width:100%;background:rgba(255,255,255,.08);height:4px;overflow:hidden}
+.tb-progress .fill{height:100%;background:var(--grad);transition:width .3s}
+
+/* CONTROLS */
+.controls{max-width:1500px;margin:16px auto 4px;padding:0 24px;display:flex;gap:12px;align-items:center;flex-wrap:wrap}
+.search-wrap{flex:1;min-width:220px;position:relative}
+.search-wrap input{width:100%;padding:10px 14px 10px 38px;border:1px solid #DCE3E8;border-radius:10px;font-family:var(--font);font-size:13px;background:#fff;color:var(--navy)}
+.search-wrap input:focus{outline:none;border-color:var(--roxo);box-shadow:0 0 0 3px rgba(111,91,255,.15)}
+.search-wrap::before{content:"🔍";position:absolute;left:13px;top:50%;transform:translateY(-50%);font-size:13px;opacity:.5}
+.ctl{display:flex;align-items:center;gap:6px;font-size:12px;color:var(--gray)}
+.ctl select{padding:9px 12px;border:1px solid #DCE3E8;border-radius:9px;font-family:var(--font);font-size:12.5px;background:#fff;color:var(--navy)}
+.btn-ghost{padding:9px 13px;background:#fff;border:1px solid #DCE3E8;border-radius:9px;font-size:12px;font-weight:500;color:var(--gray)}
+.btn-ghost:hover{border-color:var(--navy);color:var(--navy)}
+
+.container{max-width:1760px;margin:16px auto;padding:0 24px 140px}
+.loading{padding:30px;text-align:center;color:var(--gray)}
+
+/* Classification card */
+.classif{background:#fff;border-radius:14px;margin-bottom:14px;box-shadow:0 1px 4px rgba(12,35,64,.06);overflow:hidden}
+.classif-head{display:grid;grid-template-columns:auto 1fr auto auto auto;gap:16px;align-items:center;padding:16px 20px;cursor:pointer;border-left:5px solid var(--roxo);transition:background .15s}
+.classif-head:hover{background:#FAFCFD}
+.classif-icon{width:44px;height:44px;border-radius:10px;display:flex;align-items:center;justify-content:center;font-weight:800;color:#fff;font-size:13px;background:var(--grad)}
+.classif-title h3{font-size:16px;font-weight:700;color:var(--navy)}
+.classif-title .desc{font-size:11.5px;color:var(--gray);max-width:720px}
+.classif-stat{text-align:center;min-width:70px}
+.classif-stat .n{font-size:19px;font-weight:800;color:var(--navy);line-height:1}
+.classif-stat .l{font-size:9.5px;color:var(--gray);text-transform:uppercase;letter-spacing:.5px;margin-top:2px;font-weight:600}
+.classif-progress-wrap{display:flex;flex-direction:column;align-items:flex-end;gap:5px;min-width:130px}
+.classif-progress{width:130px;height:6px;background:#EDF1F4;border-radius:4px;overflow:hidden;display:flex}
+.cp-approve{background:var(--approve)} .cp-phase2{background:var(--phase2)}
+.cp-workaround{background:var(--workaround)} .cp-refuse{background:var(--refuse)}
+.classif-progress-meta{font-size:10px;color:var(--gray);font-weight:600}
+.chev{font-size:17px;color:var(--gray);transition:transform .25s}
+.classif.open .chev{transform:rotate(180deg)}
+.classif-body{display:none;border-top:1px solid #EDF1F4;padding:6px 20px 16px;background:#FAFCFD}
+.classif.open .classif-body{display:block}
+
+/* Group */
+.group{margin-top:12px;background:#fff;border:1px solid #EDF1F4;border-radius:10px;overflow:hidden}
+.group-head{display:grid;grid-template-columns:1fr auto auto auto;gap:12px;align-items:center;padding:10px 14px;cursor:pointer}
+.group-head:hover{background:#F4F8FB}
+.group-head .gn{font-size:13px;font-weight:700;color:var(--navy)}
+.group-head .gn .badge-count{margin-left:7px;background:#EDF1F4;color:var(--gray);padding:1px 7px;border-radius:8px;font-size:10px;font-weight:700}
+.group-head .gh{font-size:11.5px;color:var(--gray);font-weight:600;min-width:38px;text-align:right}
+.group-progress{width:90px;height:5px;background:#EDF1F4;border-radius:3px;overflow:hidden;display:flex}
+.group.open .group-head .chev{transform:rotate(180deg)}
+.group-body{display:none;padding:8px 10px 12px;background:#FAFCFD;border-top:1px solid #EDF1F4}
+.group.open .group-body{display:grid;grid-template-columns:repeat(auto-fill,minmax(430px,1fr));gap:10px;align-items:start}
+
+/* Task card */
+.task{background:#fff;border:1px solid #EDF1F4;border-radius:10px;padding:13px 15px;border-left:4px solid #DCE3E8;transition:all .2s}
+.task.open-details,.task.has-note{grid-column:1/-1}
+.task.decided-approve{border-left-color:var(--approve);background:linear-gradient(90deg,#F0FAF5,#fff 55%)}
+.task.decided-phase2{border-left-color:var(--phase2);background:linear-gradient(90deg,#FFF7EC,#fff 55%)}
+.task.decided-workaround{border-left-color:var(--workaround);background:linear-gradient(90deg,#E8F7FB,#fff 55%)}
+.task.decided-refuse{border-left-color:var(--refuse);background:linear-gradient(90deg,#FCEDEF,#fff 55%);opacity:.93}
+.task.hidden{display:none}
+.task-top{display:grid;grid-template-columns:1fr auto;gap:13px;align-items:start}
+.task-id-row{display:flex;align-items:center;gap:8px;flex-wrap:wrap;margin-bottom:5px}
+.task-code{font-family:'SF Mono',Monaco,Consolas,monospace;font-size:11px;background:var(--navy);color:#fff;padding:3px 8px;border-radius:5px;font-weight:600}
+.task-title{font-size:13.5px;font-weight:700;color:var(--navy);line-height:1.35}
+.task-meta{display:flex;gap:5px;flex-wrap:wrap;margin-top:6px}
+.tag-mini{font-size:10px;background:#EDF1F4;color:var(--gray);padding:2px 7px;border-radius:5px;font-weight:600}
+.tag-mini.tipo{background:#E6EDF7;color:var(--navy)}
+.tag-mini.modulo{background:#F0E5FF;color:#6F2BC9}
+.tag-mini.necessidade{background:#FFF3E5;color:#A85A00}
+.tag-mini.nlm{background:#E2F5EC;color:var(--approve)}
+.task-hours{text-align:right;min-width:60px;display:flex;flex-direction:column;align-items:flex-end}
+.task-hours .h{font-size:17px;font-weight:800;color:var(--navy);line-height:1}
+.task-hours .h .u{font-size:10px;color:var(--gray);font-weight:500}
+.task-hours .h.noest{color:var(--refuse);font-size:12px}
+.task-hours .l{font-size:9px;color:var(--gray);text-transform:uppercase;letter-spacing:.4px;font-weight:600;margin-top:2px}
+.task-actions{display:flex;gap:7px;margin-top:11px;flex-wrap:wrap;align-items:center}
+.btn-decide{padding:8px 13px;border:1.5px solid;border-radius:8px;font-size:12px;font-weight:700;background:#fff;display:inline-flex;align-items:center;gap:5px;transition:all .15s}
+.btn-approve{border-color:var(--approve);color:var(--approve)} .btn-approve:hover:not(:disabled),.btn-approve.active{background:var(--approve);color:#fff}
+.btn-phase2{border-color:var(--phase2);color:var(--phase2)} .btn-phase2:hover:not(:disabled),.btn-phase2.active{background:var(--phase2);color:#fff}
+.btn-workaround{border-color:var(--workaround);color:var(--workaround)} .btn-workaround:hover:not(:disabled),.btn-workaround.active{background:var(--workaround);color:#fff}
+.btn-refuse{border-color:var(--refuse);color:var(--refuse)} .btn-refuse:hover:not(:disabled),.btn-refuse.active{background:var(--refuse);color:#fff}
+.btn-decide.active{color:#fff;box-shadow:0 2px 10px rgba(0,0,0,.12)}
+.btn-detalhes{padding:8px 13px;border:1px dashed #DCE3E8;border-radius:8px;background:transparent;color:var(--gray);font-size:11.5px;font-weight:600;margin-left:auto}
+.btn-detalhes:hover{border-color:var(--navy);color:var(--navy);border-style:solid}
+.task-extra{display:none;margin-top:11px;padding-top:11px;border-top:1px dashed #DCE3E8}
+.task.open-details .task-extra{display:block}
+.task.has-note .note-wrap{display:block}
+.note-wrap{display:none;margin-top:10px;padding:11px;background:rgba(111,91,255,.06);border-left:3px solid var(--roxo);border-radius:6px}
+.note-wrap .lbl{font-size:10px;color:var(--gray);font-weight:700;text-transform:uppercase;letter-spacing:.5px;margin-bottom:5px}
+.note-wrap textarea{width:100%;border:1px solid #DCE3E8;border-radius:6px;padding:8px 10px;font-family:var(--font);font-size:12.5px;min-height:48px;resize:vertical}
+.note-wrap textarea:focus{outline:none;border-color:var(--roxo)}
+.estrow{display:flex;align-items:center;gap:7px;margin-top:9px}
+.estrow input{width:74px;border:1.5px solid var(--roxo);border-radius:7px;padding:6px;font-size:14px;font-weight:700;color:var(--roxo)}
+.estrow .qb{background:#fff;border:1px solid #DCE3E8;border-radius:6px;padding:5px 9px;font-size:11.5px;font-weight:600}
+.estrow .qb:hover{border-color:var(--roxo);color:var(--roxo)}
+.detail-grid{display:grid;grid-template-columns:repeat(auto-fit,minmax(170px,1fr));gap:10px;background:#FAFCFD;padding:10px 13px;border-radius:8px;margin-bottom:11px}
+.detail-grid .lbl{font-size:9px;color:var(--gray);text-transform:uppercase;letter-spacing:.5px;font-weight:700}
+.detail-grid .val{font-size:12px;color:var(--navy);font-weight:600}
+.detail-block{margin-bottom:10px}
+.detail-block .dl{font-size:10px;color:var(--gray);text-transform:uppercase;letter-spacing:.5px;font-weight:700;margin-bottom:4px}
+.detail-block .dv{font-size:12.5px;color:var(--ink);line-height:1.55}
+.detail-block .dv.muted{color:var(--gray);font-style:italic}
+.detail-block .dv.rich{white-space:normal}
+.detail-block .dv.rich div{margin:0}
+.detail-block .dv.rich a{color:var(--roxo);font-weight:600;word-break:break-all}
+.detail-block .dv.rich [style]{font-size:12.5px!important}
+
+/* FAB */
+.fab-bar{position:fixed;bottom:16px;left:50%;transform:translateX(-50%);background:var(--navy);color:#fff;border-radius:12px;padding:9px 13px;display:flex;gap:7px;align-items:center;box-shadow:0 10px 30px rgba(12,35,64,.30);z-index:90;flex-wrap:wrap;justify-content:center;max-width:calc(100% - 24px)}
+.fab-bar .fl{font-size:10.5px;color:var(--gray-light);text-transform:uppercase;letter-spacing:.5px;font-weight:700;padding:0 6px}
+.btn-fab{padding:8px 13px;background:rgba(255,255,255,.10);border:1px solid rgba(255,255,255,.14);border-radius:8px;color:#fff;font-size:12px;font-weight:600;display:inline-flex;align-items:center;gap:5px}
+.btn-fab:hover{background:rgba(255,255,255,.18)}
+.btn-fab.primary{background:var(--grad);border-color:transparent} .btn-fab.primary:hover{filter:brightness(1.1)}
+.btn-fab.danger{background:transparent;border-color:rgba(255,122,136,.4);color:#FF9AA6}
+.btn-fab.danger:hover{background:rgba(255,122,136,.15)}
+
+.empty-state{padding:40px 20px;text-align:center;color:var(--gray);background:#fff;border-radius:14px;border:2px dashed #DCE3E8;margin-top:18px}
+.empty-state .ic{font-size:30px;margin-bottom:8px;opacity:.5}
+.empty-state .h{font-size:14px;font-weight:700;color:var(--navy);margin-bottom:3px}
+.toast{position:fixed;bottom:84px;left:50%;transform:translateX(-50%) translateY(20px);background:var(--navy);color:#fff;padding:11px 18px;border-radius:9px;font-size:13px;font-weight:600;opacity:0;pointer-events:none;transition:all .25s;z-index:200;box-shadow:0 6px 20px rgba(12,35,64,.30)}
+.toast.show{opacity:1;transform:translateX(-50%) translateY(0)}
+.toast.approve{background:var(--approve)} .toast.phase2{background:var(--phase2)}
+.toast.workaround{background:var(--workaround)} .toast.refuse{background:var(--refuse)}
+@media print{.topbar{position:relative}.controls,.fab-bar,.btn-decide,.btn-detalhes,.search-wrap{display:none!important}.classif-body,.group-body,.task-extra{display:block!important}.task{page-break-inside:avoid}}
+@media(max-width:768px){.classif-head{grid-template-columns:auto 1fr auto;gap:10px;padding:13px}.classif-head .classif-stat:nth-of-type(2),.classif-progress-wrap{display:none}.task-top{grid-template-columns:1fr}}
+</style>
+
+<script src="supabase-data.js"></script>
+<script src="supabase-compat.js"></script>
+</head>
+<body>
+
+<header class="topbar">
+  <div class="topbar-inner">
+    <div class="tb-brand">
+      <div class="tb-logo">TSC</div>
+      <div class="tb-titles">
+        <div class="t1">Reunião de Decisão de GAPs · TOTVS Protheus</div>
+        <div class="t2"><select id="selCliente" style="background:transparent;border:none;color:#fff;font-size:14px;font-weight:600"></select></div>
+        <div class="t3" id="lastSaved">— sem decisões registradas ainda</div>
+      </div>
+    </div>
+    <div class="tb-kpis" id="kpis">
+      <div class="kpi-pill" data-filter="all"><span class="lbl">Total</span><span class="val" id="kTotalHrs">0<span class="u">h</span></span><span class="pct"><span id="kTotalCount">0</span> GAPs</span></div>
+      <div class="kpi-pill approve" data-filter="approve"><span class="lbl">✅ Aprovado</span><span class="val"><span id="kApproveHrs">0</span><span class="u">h</span></span><span class="pct"><span id="kApproveCount">0</span> · <span id="kApprovePct">0%</span></span></div>
+      <div class="kpi-pill phase2" data-filter="phase2"><span class="lbl">⏰ 2ª Fase</span><span class="val"><span id="kPhase2Hrs">0</span><span class="u">h</span></span><span class="pct"><span id="kPhase2Count">0</span> · <span id="kPhase2Pct">0%</span></span></div>
+      <div class="kpi-pill workaround" data-filter="workaround"><span class="lbl">🛟 Contorno</span><span class="val"><span id="kWorkaroundHrs">0</span><span class="u">h</span></span><span class="pct"><span id="kWorkaroundCount">0</span> · <span id="kWorkaroundPct">0%</span></span></div>
+      <div class="kpi-pill refuse" data-filter="refuse"><span class="lbl">❌ Recusado</span><span class="val"><span id="kRefuseHrs">0</span><span class="u">h</span></span><span class="pct"><span id="kRefuseCount">0</span> · <span id="kRefusePct">0%</span></span></div>
+      <div class="kpi-pill pending" data-filter="pending"><span class="lbl">⏳ Pendente</span><span class="val"><span id="kPendingHrs">0</span><span class="u">h</span></span><span class="pct"><span id="kPendingCount">0</span> · <span id="kPendingPct">100%</span></span></div>
+    </div>
+  </div>
+  <div class="tb-progress"><div class="fill" id="progressFill" style="width:0%"></div></div>
+</header>
+
+<div class="controls">
+  <div class="search-wrap"><input type="text" id="search" placeholder="Buscar por nº, título, módulo, processo, tag…"></div>
+  <div class="ctl">Agrupar por:
+    <select id="selGroupBy">
+      <option value="categoria">Classificação (categoria)</option>
+      <option value="modulo">Módulo</option>
+      <option value="processo">Processo / Serviço</option>
+      <option value="necessidade">Necessidade (Necessário/Desejável…)</option>
+      <option value="etapa">Etapa do Gap</option>
+      <option value="consultor">Consultor</option>
+    </select>
+  </div>
+  <button class="btn-ghost" id="btnExpand">Expandir tudo</button>
+  <button class="btn-ghost" id="btnCollapse">Recolher tudo</button>
+  <a class="btn-ghost" href="/" style="text-decoration:none">← Board operacional</a>
+</div>
+
+<div class="container" id="main"><div class="loading">Carregando GAPs…</div></div>
+
+<div class="fab-bar">
+  <span class="fl">Filtro:</span>
+  <span id="filterLabel" class="fl" style="color:#fff">Todos</span>
+  <button class="btn-fab primary" id="btnSave">💾 Salvar (local)</button>
+  <button class="btn-fab" id="btnReload">↻ Recarregar</button>
+  <button class="btn-fab" id="btnCSV">📊 CSV</button>
+  <button class="btn-fab" id="btnJSON">⬇ JSON</button>
+  <button class="btn-fab" id="btnPrint">🖨️ PDF</button>
+  <button class="btn-fab" id="btnSummary">📋 Resumo</button>
+  <button class="btn-fab danger" id="btnReset">↺ Limpar</button>
+</div>
+
+<div class="toast" id="toast"></div>
+
+<script>
+"use strict";
+/* ════════ Config / estado ════════ */
+const DEC_LABEL = {approve:"Aprovado",phase2:"2ª Fase",workaround:"Contorno",refuse:"Recusado"};
+const NECESSIDADES = ["NECESSARIO","PRIORIDADE","DESEJAVEL","OPCIONAL","INDEFINIDO"];
+const CLOSED = new Set(["006","009"]);
+const $  = (s,p=document)=>p.querySelector(s);
+const $$ = (s,p=document)=>[...p.querySelectorAll(s)];
+const esc = s => (s||"").replace(/[&<>"]/g,c=>({"&":"&amp;","<":"&lt;",">":"&gt;",'"':"&quot;"}[c]));
+const escAttr = s => esc(s).replace(/'/g,"&#39;");
+const fmtH = h => { h=Number(h)||0; return Number.isInteger(h)?h:h.toFixed(1); };
+
+let clienteAtual = "digitro", clienteNome = "Digitro";
+let TASKS = [], decisions = {}, descCache = {};
+let groupBy = "categoria", searchTerm = "", currentFilter = "all";
+let dirty = false;
+
+function toast(msg, cls){ const t=$("#toast"); t.className="toast show "+(cls||""); t.textContent=msg; clearTimeout(t._t); t._t=setTimeout(()=>t.className="toast",2200); }
+const GAPS_BASE = "/gaps"; // rotas próprias do Gaps vivem sob /gaps na 8082 (gmail vai direto ao backend unificado)
+function _gapsURL(path){ return path.indexOf("/api/gmail/")===0 ? path : (GAPS_BASE + path); }
+async function api(path, opts){ const r=await fetch(_gapsURL(path),opts); const j=await r.json().catch(()=>({ok:false,error:"resposta inválida"})); if(!r.ok||j.ok===false) throw new Error(j.error||("HTTP "+r.status)); return j; }
+
+/* ════════ Derivação de dimensões a partir das tags ════════ */
+const PROTHEUS_MODS = ["FINANCEIRO","FISCAL","CONTABILIDADE","COMPRAS","FATURAMENTO","ESTOQUE/CUSTOS","ESTOQUE","CUSTOS","IMPORTAÇÃO","GFE","PCP","MNT","ATIVO FIXO","CONTRATOS","FATURAMENTO","OMS","RH","JURIDICO"];
+function tUp(t){ return (t.tags||[]).map(x=>String(x).toUpperCase()); }
+function categoriaOf(t){
+  const tg = tUp(t);
+  const has = s => tg.some(x=>x.includes(s));
+  if(has("USABIL")) return "Usabilidade";
+  if(has("MELHORIA")) return "Melhoria";
+  if(has("INTEGRA")) return "Integração";
+  if(has("IMPORTA")) return "Importação";
+  if(has("RELAT")) return "Relatório & Analytics";
+  if(has("ETIQUETA")) return "Etiqueta / Impressão";
+  if(has("GESTAO")||has("GESTÃO")) return "Gestão";
+  if(has("TECNOLOGIA")||has("LICEN")) return "Tecnologia";
+  if(has("CAPACITA")) return "Capacitação";
+  if(has("GAP")) return "Personalização (GAP)";
+  return "Outros";
+}
+function moduloOf(t){
+  const tg = tUp(t);
+  const m = PROTHEUS_MODS.find(mod=>tg.includes(mod));
+  return m ? m.charAt(0)+m.slice(1).toLowerCase() : "Geral";
+}
+function necessidadeOf(t){
+  const tg = tUp(t);
+  const n = NECESSIDADES.find(x=>tg.includes(x));
+  return n ? n.charAt(0)+n.slice(1).toLowerCase() : "—";
+}
+function etapaOf(t){
+  const tg = tUp(t);
+  if(tg.includes("ORCAMENTO PENDENTE")) return "Orçamento Pendente";
+  if(tg.includes("LEVANTAR REQUISITOS")) return "Levantar Requisitos";
+  if(tg.includes("LEVANTAMENTO")) return "Levantamento";
+  if(tg.includes("GAP")) return "GAP";
+  return "Outros";
+}
+function processoOf(t){ return t.service_description || t.activity_description || t.project_description || "Sem processo"; }
+function consultorOf(t){ return t.user_assigned_description || "(a definir)"; }
+function dimOf(t, dim){
+  return dim==="modulo"?moduloOf(t):dim==="necessidade"?necessidadeOf(t):dim==="etapa"?etapaOf(t)
+       :dim==="processo"?processoOf(t):dim==="consultor"?consultorOf(t):categoriaOf(t);
+}
+
+/* ════════ Carga ════════ */
+async function init(){
+  try{
+    const cls = await api("/api/clientes");
+    const sel = $("#selCliente");
+    sel.innerHTML = (cls.clientes||[]).map(c=>`<option value="${c.chave}" ${c.chave===clienteAtual?"selected":""}>${esc(c.nome)}</option>`).join("");
+    sel.onchange = async ()=>{ if(dirty && !confirm("Há decisões não salvas. Trocar de cliente mesmo assim?")) { sel.value=clienteAtual; return; } clienteAtual=sel.value; clienteNome=sel.selectedOptions[0].textContent; await loadAll(); };
+  }catch(e){ toast("Falha ao listar clientes: "+e.message,"refuse"); }
+  await loadAll();
+}
+async function loadAll(){
+  $("#main").innerHTML = `<div class="loading">Carregando GAPs de ${esc(clienteNome)}…</div>`;
+  try{
+    const [tk, dec] = await Promise.all([
+      api("/api/tickets?cliente="+encodeURIComponent(clienteAtual)),
+      api("/api/decisoes?cliente="+encodeURIComponent(clienteAtual)).catch(()=>({decisoes:{}}))
+    ]);
+    clienteNome = tk.cliente || clienteNome;
+    // só Gaps no radar (mesma regra do board): tem etapa-foco e não fechado
+    TASKS = (tk.tickets||[]).filter(t=>{
+      const tg = tUp(t);
+      const foco = ["GAP","LEVANTAR REQUISITOS","LEVANTAMENTO","ORCAMENTO PENDENTE"].some(e=>tg.includes(e));
+      return foco && !CLOSED.has(t.status);   // não traz resolvidos/cancelados p/ a reunião
+    });
+    decisions = dec.decisoes || {};
+    dirty = false;
+    render();
+    updateLastSaved(dec.atualizado_em);
+  }catch(e){ $("#main").innerHTML = `<div class="empty-state"><div class="ic">⚠️</div><div class="h">Erro ao carregar</div><div>${esc(e.message)}</div></div>`; }
+}
+
+/* ════════ Render ════════ */
+function render(){
+  const main = $("#main"); main.innerHTML = "";
+  // monta classificações dinâmicas pela dimensão escolhida; subgrupo sempre por processoOf (ou módulo se já agrupando por processo)
+  const subDim = groupBy==="processo" ? "modulo" : "processo";
+  const cmap = new Map();
+  TASKS.forEach(t=>{
+    const ck = dimOf(t, groupBy);
+    if(!cmap.has(ck)) cmap.set(ck, new Map());
+    const gk = dimOf(t, subDim);
+    const gm = cmap.get(ck);
+    if(!gm.has(gk)) gm.set(gk, []);
+    gm.get(gk).push(t);
+  });
+  // ordena classificações por horas desc
+  const classifs = [...cmap.entries()].map(([name, gm])=>{
+    const items = [...gm.values()].flat();
+    return {name, gm, total:items.reduce((s,t)=>s+(Number(t.time_estimate)||0),0), count:items.length};
+  }).sort((a,b)=>b.total-a.total);
+  if(!classifs.length){ main.innerHTML = `<div class="empty-state"><div class="ic">📭</div><div class="h">Nenhum GAP</div><div>Este cliente não tem GAPs no radar.</div></div>`; return; }
+
+  classifs.forEach((c, ci)=>{
+    const groups = [...c.gm.entries()].map(([n, items])=>({n, items, total:items.reduce((s,t)=>s+(Number(t.time_estimate)||0),0)}))
+                    .sort((a,b)=>b.total-a.total);
+    const groupsHTML = groups.map(g=>`
+      <div class="group" data-group="${escAttr(g.n)}">
+        <div class="group-head">
+          <div class="gn">${esc(g.n)} <span class="badge-count">${g.items.length}</span></div>
+          <div class="group-progress" data-gp></div>
+          <div class="gh">${fmtH(g.total)}h</div>
+          <span class="chev">▾</span>
+        </div>
+        <div class="group-body">${g.items.map(renderTask).join("")}</div>
+      </div>`).join("");
+    const card = document.createElement("section");
+    card.className = "classif"+(ci===0?" open":"");
+    card.dataset.idx = ci;
+    card.innerHTML = `
+      <header class="classif-head">
+        <div class="classif-icon">${esc(c.name.slice(0,2).toUpperCase())}</div>
+        <div class="classif-title"><h3>${esc(c.name)}</h3><div class="desc">${c.count} GAP(s) · agrupados por ${esc(subDim==="modulo"?"módulo":"processo")}</div></div>
+        <div class="classif-stat"><div class="n">${c.count}</div><div class="l">GAPs</div></div>
+        <div class="classif-stat"><div class="n">${fmtH(c.total)}</div><div class="l">horas</div></div>
+        <div class="classif-progress-wrap"><div class="classif-progress" data-cp></div><div class="classif-progress-meta" data-cm>0% decidido</div></div>
+        <span class="chev">▾</span>`+`
+      <div class="classif-body">${groupsHTML}</div>`;
+    main.appendChild(card);
+  });
+  bindEvents(); applyAll(); updateKPIs(); applyFilter(); updateProgress();
+}
+
+function renderTask(t){
+  const d = decisions[t.id] || {};
+  const decClass = d.decision ? `decided-${d.decision}` : "";
+  const est = Number(t.time_estimate)||0;
+  const nec = necessidadeOf(t), mod = moduloOf(t), et = etapaOf(t);
+  return `
+  <div class="task ${decClass}" data-code="${t.id}">
+    <div class="task-top">
+      <div>
+        <div class="task-id-row"><span class="task-code">#${t.id}</span><span class="task-title">${esc(t.title||"—")}</span></div>
+        <div class="task-meta">
+          <span class="tag-mini tipo">${esc(et)}</span>
+          <span class="tag-mini modulo">${esc(mod)}</span>
+          ${nec!=="—"?`<span class="tag-mini necessidade">${esc(nec)}</span>`:""}
+          <span class="tag-mini">${esc(t.status_description||"")}</span>
+        </div>
+      </div>
+      <div class="task-hours">
+        ${est>0?`<span class="h">${fmtH(est)}<span class="u">h</span></span>`:`<span class="h noest">s/ est.</span>`}
+        <span class="l">estimativa</span>
+      </div>
+    </div>
+    <div class="task-actions">
+      <button class="btn-decide btn-approve ${d.decision==="approve"?"active":""}" data-action="approve" data-code="${t.id}"><span>✓</span> Aprovar</button>
+      <button class="btn-decide btn-phase2 ${d.decision==="phase2"?"active":""}" data-action="phase2" data-code="${t.id}"><span>⏰</span> 2ª Fase</button>
+      <button class="btn-decide btn-workaround ${d.decision==="workaround"?"active":""}" data-action="workaround" data-code="${t.id}"><span>🛟</span> Contorno</button>
+      <button class="btn-decide btn-refuse ${d.decision==="refuse"?"active":""}" data-action="refuse" data-code="${t.id}"><span>✕</span> Recusar</button>
+      <button class="btn-detalhes" data-action="toggle" data-code="${t.id}">Ver detalhes ▾</button>
+    </div>
+    <div class="note-wrap">
+      <div class="lbl">📝 Observação da decisão (opcional)</div>
+      <textarea data-note="${t.id}" placeholder="Ex.: cliente pediu reavaliar antes do go-live…">${esc(d.note||"")}</textarea>
+      <div class="estrow">
+        <span style="font-size:11px;color:var(--gray);font-weight:600">Estimativa p/ decisão:</span>
+        <input type="number" min="0" step="1" data-est="${t.id}" value="${d.estimativa||est||""}" placeholder="h"><span style="font-size:11px;color:var(--gray)">h</span>
+        ${[4,8,16,24,40].map(h=>`<button class="qb" data-setest="${t.id}" data-h="${h}">${h}h</button>`).join("")}
+      </div>
+    </div>
+    <div class="task-extra" data-extra="${t.id}">
+      <div class="detail-grid">
+        <div><div class="lbl">Processo / Serviço</div><div class="val">${esc(processoOf(t))}</div></div>
+        <div><div class="lbl">Projeto</div><div class="val">${esc(t.project_description||"—")}</div></div>
+        <div><div class="lbl">Consultor</div><div class="val">${esc(consultorOf(t))}</div></div>
+        <div><div class="lbl">Tags</div><div class="val">${esc((t.tags||[]).join(", "))}</div></div>
+      </div>
+      <div class="detail-block"><div class="dl">📄 Descrição</div><div class="dv muted" data-desc="${t.id}">Carregar descrição ao expandir…</div></div>
+    </div>
+  </div>`;
+}
+
+/* ════════ Eventos ════════ */
+function bindEvents(){
+  $$(".classif-head").forEach(h=>h.onclick=()=>h.parentElement.classList.toggle("open"));
+  $$(".group-head").forEach(h=>h.onclick=e=>{e.stopPropagation();h.parentElement.classList.toggle("open");});
+  $$("[data-action]").forEach(b=>b.onclick=e=>{
+    e.stopPropagation();
+    const code=b.dataset.code, act=b.dataset.action;
+    if(act==="toggle"){
+      const task=b.closest(".task"); const open=task.classList.toggle("open-details"); task.classList.toggle("has-note", open||decisions[code]?.decision||decisions[code]?.note);
+      b.textContent = open?"Ocultar detalhes ▴":"Ver detalhes ▾";
+      if(open) loadDesc(code);
+    } else decide(code, act);
+  });
+  $$("textarea[data-note]").forEach(ta=>ta.oninput=()=>{ const c=ta.dataset.note; decisions[c]=decisions[c]||{}; decisions[c].note=ta.value; markDirty(); });
+  $$("input[data-est]").forEach(inp=>inp.onchange=()=>{ const c=inp.dataset.est; decisions[c]=decisions[c]||{}; decisions[c].estimativa=parseInt(inp.value,10)||0; markDirty(); });
+  $$("[data-setest]").forEach(b=>b.onclick=()=>{ const c=b.dataset.setest; const inp=$(`input[data-est="${c}"]`); inp.value=b.dataset.h; decisions[c]=decisions[c]||{}; decisions[c].estimativa=parseInt(b.dataset.h,10); markDirty(); });
+}
+// Renderiza a descrição do ticket: se vier com HTML (tags), preserva a
+// formatação (divs, quebras, links clicáveis); se for texto puro, converte
+// quebras de linha em <br>. Sanitiza tags perigosas e abre links em nova aba.
+function renderDesc(raw){
+  const looksHtml = /<\/?[a-z][\s\S]*>/i.test(raw);
+  let html = looksHtml ? raw : esc(raw).replace(/\n/g,"<br>");
+  // remove elementos perigosos
+  html = html.replace(/<\s*(script|style|iframe|object|embed)[\s\S]*?<\s*\/\s*\1\s*>/gi,"")
+             .replace(/\son\w+\s*=\s*("[^"]*"|'[^']*'|[^\s>]+)/gi,"");
+  const div = document.createElement("div");
+  div.innerHTML = html;
+  div.querySelectorAll("a[href]").forEach(a=>{ a.target="_blank"; a.rel="noopener"; });
+  return div.innerHTML;
+}
+async function loadDesc(code){
+  const el=$(`[data-desc="${code}"]`); if(!el||el.dataset.loaded) return;
+  const t=TASKS.find(x=>x.id===code); if(!t) return;
+  try{
+    if(!descCache[code]){ const j=await api(`/api/ticket/${t.uuid}`); descCache[code]=(j.ticket?.description||"").trim(); }
+    el.dataset.loaded="1";
+    const v=descCache[code];
+    if(v){ el.className="dv rich"; el.innerHTML=renderDesc(v); }
+    else { el.className="dv muted"; el.textContent="Sem descrição registrada."; }
+  }
+  catch(e){ el.className="dv muted"; el.textContent="Erro ao carregar descrição."; }
+}
+function decide(code, act){
+  decisions[code]=decisions[code]||{};
+  decisions[code].decision = decisions[code].decision===act ? null : act;
+  decisions[code].ts = new Date().toISOString();
+  markDirty(); applyTask(code); updateKPIs(); applyFilter(); updateProgress();
+  if(decisions[code].decision) toast(`#${code} · ${DEC_LABEL[act]}`, act);
+}
+function applyTask(code){
+  const task=$(`.task[data-code="${code}"]`); if(!task) return;
+  const d=decisions[code]||{};
+  task.classList.remove("decided-approve","decided-phase2","decided-workaround","decided-refuse");
+  if(d.decision) task.classList.add(`decided-${d.decision}`);
+  $$(".btn-decide",task).forEach(b=>b.classList.toggle("active", b.dataset.action===d.decision));
+  if(d.note||d.decision) task.classList.add("has-note");
+}
+function applyAll(){ Object.keys(decisions).forEach(applyTask); }
+function markDirty(){ dirty=true; $("#lastSaved").textContent = "● alterações não salvas — clique em Salvar (local)"; }
+
+/* ════════ KPIs / progresso / filtro ════════ */
+function statFor(list){
+  const s={approve:{h:0,c:0},phase2:{h:0,c:0},workaround:{h:0,c:0},refuse:{h:0,c:0},pending:{h:0,c:0}}; let tot=0;
+  list.forEach(t=>{ const h=Number(t.time_estimate)||0; tot+=h; const k=(decisions[t.id]||{}).decision||"pending"; (s[k]||s.pending).h+=h; (s[k]||s.pending).c++; });
+  return {s,tot};
+}
+function updateKPIs(){
+  const {s,tot}=statFor(TASKS);
+  $("#kTotalHrs").innerHTML = fmtH(tot)+'<span class="u">h</span>'; $("#kTotalCount").textContent=TASKS.length;
+  const set=(k,id)=>{ $(`#k${id}Hrs`).textContent=fmtH(s[k].h); $(`#k${id}Count`).textContent=s[k].c; $(`#k${id}Pct`).textContent= tot?Math.round(s[k].h/tot*100)+"%":"0%"; };
+  set("approve","Approve"); set("phase2","Phase2"); set("workaround","Workaround"); set("refuse","Refuse"); set("pending","Pending");
+  // progress por classif/grupo
+  $$(".classif").forEach(card=>{
+    const codes=$$(".task",card).map(t=>t.dataset.code);
+    paintProg($("[data-cp]",card), $("[data-cm]",card), codes);
+  });
+  $$(".group").forEach(g=>{ paintProg($("[data-gp]",g), null, $$(".task",g).map(t=>t.dataset.code)); });
+}
+function paintProg(bar, meta, codes){
+  if(!bar) return; const list=codes.map(c=>TASKS.find(t=>t.id===c)).filter(Boolean); const {s,tot}=statFor(list);
+  const seg=k=>tot?(s[k].h/tot*100):0;
+  bar.innerHTML = `<div class="cp-approve" style="width:${seg("approve")}%"></div><div class="cp-phase2" style="width:${seg("phase2")}%"></div><div class="cp-workaround" style="width:${seg("workaround")}%"></div><div class="cp-refuse" style="width:${seg("refuse")}%"></div>`;
+  if(meta){ const dec=s.approve.c+s.phase2.c+s.workaround.c+s.refuse.c; meta.textContent=`${Math.round(dec/list.length*100||0)}% decidido`; }
+}
+function updateProgress(){ const {s}=statFor(TASKS); const dec=s.approve.c+s.phase2.c+s.workaround.c+s.refuse.c; $("#progressFill").style.width=(TASKS.length?dec/TASKS.length*100:0)+"%"; }
+function applyFilter(){
+  const term=searchTerm.toLowerCase();
+  $$(".task").forEach(task=>{
+    const code=task.dataset.code; const t=TASKS.find(x=>x.id===code)||{};
+    const d=decisions[code]||{};
+    let show=true;
+    if(currentFilter!=="all"){ show = currentFilter==="pending" ? !d.decision : d.decision===currentFilter; }
+    if(show && term){ const hay=(code+" "+(t.title||"")+" "+(t.tags||[]).join(" ")+" "+processoOf(t)+" "+moduloOf(t)).toLowerCase(); show=hay.includes(term); }
+    task.classList.toggle("hidden", !show);
+  });
+  // esconde grupos/classifs vazios
+  $$(".group").forEach(g=>g.style.display = $$(".task:not(.hidden)",g).length?"":"none");
+  $$(".classif").forEach(c=>c.style.display = $$(".task:not(.hidden)",c).length?"":"none");
+  $("#filterLabel").textContent = currentFilter==="all"?"Todos":(DEC_LABEL[currentFilter]||"Pendente");
+}
+
+/* ════════ Persistência local ════════ */
+async function saveServer(){
+  try{ await api("/api/decisoes?cliente="+encodeURIComponent(clienteAtual),{method:"POST",headers:{"Content-Type":"application/json"},body:JSON.stringify({decisoes})}); dirty=false; updateLastSaved("agora"); toast("Decisões salvas localmente ✓","approve"); }
+  catch(e){ toast("Falha ao salvar: "+e.message,"refuse"); }
+}
+function updateLastSaved(quando){
+  const dec=Object.values(decisions).filter(d=>d.decision).length;
+  $("#lastSaved").textContent = dec===0 ? "— sem decisões registradas ainda"
+    : `${dec} de ${TASKS.length} GAPs decididos${quando?` · salvo ${quando==="agora"?"agora":"em "+quando}`:""}`;
+}
+function exportCSV(){
+  const head=["id","titulo","categoria","modulo","processo","necessidade","etapa","estimativa_h","estimativa_decisao","decisao","nota"];
+  const rows=TASKS.map(t=>{ const d=decisions[t.id]||{}; return [t.id,t.title,categoriaOf(t),moduloOf(t),processoOf(t),necessidadeOf(t),etapaOf(t),Number(t.time_estimate)||0,d.estimativa||"",DEC_LABEL[d.decision]||"Pendente",(d.note||"").replace(/\n/g," ")]; });
+  const csv=[head,...rows].map(r=>r.map(c=>`"${String(c??"").replace(/"/g,'""')}"`).join(",")).join("\n");
+  dl(new Blob(["﻿"+csv],{type:"text/csv;charset=utf-8"}), `decisoes_${clienteAtual}_${hoje()}.csv`);
+}
+function exportJSON(){ dl(new Blob([JSON.stringify({cliente:clienteAtual,exportado_em:new Date().toISOString(),decisoes},null,2)],{type:"application/json"}), `decisoes_${clienteAtual}_${hoje()}.json`); }
+function dl(blob,name){ const a=document.createElement("a"); a.href=URL.createObjectURL(blob); a.download=name; a.click(); URL.revokeObjectURL(a.href); }
+const hoje=()=>new Date().toISOString().slice(0,10);
+function summary(){
+  const {s,tot}=statFor(TASKS);
+  const ln=(k,l)=>`${l}: ${s[k].c} GAPs · ${fmtH(s[k].h)}h (${tot?Math.round(s[k].h/tot*100):0}%)`;
+  alert(`RESUMO — ${clienteNome}\n\nTotal: ${TASKS.length} GAPs · ${fmtH(tot)}h\n\n✅ ${ln("approve","Aprovado")}\n⏰ ${ln("phase2","2ª Fase")}\n🛟 ${ln("workaround","Contorno")}\n❌ ${ln("refuse","Recusado")}\n⏳ ${ln("pending","Pendente")}`);
+}
+
+/* ════════ Listeners globais ════════ */
+$("#search").oninput=e=>{ searchTerm=e.target.value.trim(); applyFilter(); };
+$("#selGroupBy").onchange=e=>{ groupBy=e.target.value; render(); };
+$("#btnExpand").onclick=()=>$$(".classif,.group").forEach(x=>x.classList.add("open"));
+$("#btnCollapse").onclick=()=>$$(".classif,.group").forEach(x=>x.classList.remove("open"));
+$("#btnSave").onclick=saveServer;
+$("#btnReload").onclick=()=>{ if(dirty&&!confirm("Descartar alterações não salvas e recarregar?"))return; loadAll(); };
+$("#btnCSV").onclick=exportCSV; $("#btnJSON").onclick=exportJSON;
+$("#btnPrint").onclick=()=>{ $$(".classif,.group").forEach(x=>x.classList.add("open")); setTimeout(()=>window.print(),200); };
+$("#btnSummary").onclick=summary;
+$("#btnReset").onclick=()=>{ if(!confirm("Limpar TODAS as decisões deste cliente? (não salva até clicar em Salvar)"))return; decisions={}; render(); markDirty(); };
+$("#kpis").addEventListener("click",e=>{ const p=e.target.closest(".kpi-pill"); if(!p)return; const f=p.dataset.filter; currentFilter=(currentFilter===f&&f!=="all")?"all":f; $$(".kpi-pill").forEach(x=>x.classList.toggle("active", x.dataset.filter===currentFilter&&currentFilter!=="all")); applyFilter(); });
+window.addEventListener("beforeunload",e=>{ if(dirty){ e.preventDefault(); e.returnValue=""; } });
+
+init();
+</script>
+</body>
+</html>
