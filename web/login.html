@@ -1,0 +1,56 @@
+<!doctype html>
+<html lang="pt-BR">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Gaps · Tomada de Decisão — Login</title>
+<style>
+  :root{--totvs:#362f6e;--totvs2:#8a63d2;--bg:#0f1226;--card:#171a33;--txt:#e8e9f3;--muted:#a9adc9;--err:#ff6b7f}
+  *{box-sizing:border-box}
+  body{margin:0;min-height:100vh;display:grid;place-items:center;font-family:Inter,-apple-system,Segoe UI,Roboto,sans-serif;
+       background:radial-gradient(1200px 600px at 20% -10%,#2a2560,transparent),var(--bg);color:var(--txt)}
+  .card{width:min(92vw,380px);background:var(--card);border:1px solid #262a4d;border-radius:16px;padding:32px 28px;
+        box-shadow:0 20px 60px rgba(0,0,0,.45)}
+  .brand{display:flex;align-items:center;gap:10px;margin-bottom:6px}
+  .dot{width:10px;height:10px;border-radius:50%;background:linear-gradient(135deg,var(--totvs2),#4de1c1)}
+  h1{font-size:18px;margin:0}
+  p.sub{color:var(--muted);font-size:13px;margin:4px 0 22px}
+  label{display:block;font-size:12px;color:var(--muted);margin:14px 0 6px}
+  input{width:100%;padding:11px 12px;border-radius:10px;border:1px solid #2c3157;background:#10132a;color:var(--txt);font-size:14px}
+  input:focus{outline:none;border-color:var(--totvs2)}
+  button{width:100%;margin-top:22px;padding:12px;border:0;border-radius:10px;cursor:pointer;font-weight:600;font-size:14px;
+         color:#fff;background:linear-gradient(135deg,var(--totvs),var(--totvs2))}
+  button:disabled{opacity:.6;cursor:default}
+  .msg{margin-top:14px;font-size:13px;min-height:18px;color:var(--err)}
+  .foot{margin-top:18px;font-size:11px;color:var(--muted);text-align:center}
+</style>
+</head>
+<body>
+  <form class="card" id="f">
+    <div class="brand"><span class="dot"></span><h1>Gaps · Tomada de Decisão</h1></div>
+    <p class="sub">Acesso restrito — entre com seu e-mail corporativo.</p>
+    <label for="email">E-mail</label>
+    <input id="email" type="email" autocomplete="username" placeholder="nome@totvs.com.br" required>
+    <label for="senha">Senha</label>
+    <input id="senha" type="password" autocomplete="current-password" required>
+    <button id="btn" type="submit">Entrar</button>
+    <div class="msg" id="msg"></div>
+    <div class="foot">TOTVS SC · Tasks · Supabase</div>
+  </form>
+<script>
+  const f=document.getElementById('f'),msg=document.getElementById('msg'),btn=document.getElementById('btn');
+  // já logado? vai direto
+  fetch('/api/me').then(r=>{if(r.ok)location.href='/';});
+  f.addEventListener('submit',async e=>{
+    e.preventDefault();msg.textContent='';btn.disabled=true;btn.textContent='Entrando…';
+    try{
+      const r=await fetch('/api/login',{method:'POST',headers:{'Content-Type':'application/json'},
+        body:JSON.stringify({email:email.value.trim(),senha:senha.value})});
+      const d=await r.json();
+      if(r.ok&&d.ok){location.href='/';}
+      else{msg.textContent=d.error||'Falha no login.';btn.disabled=false;btn.textContent='Entrar';}
+    }catch(err){msg.textContent='Erro de conexão.';btn.disabled=false;btn.textContent='Entrar';}
+  });
+</script>
+</body>
+</html>

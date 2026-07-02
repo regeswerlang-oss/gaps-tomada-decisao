@@ -1,0 +1,20 @@
+# segredos — NUNCA versionar
+.env
+.env.local
+*.pem
+
+# python
+__pycache__/
+*.pyc
+.venv/
+venv/
+
+# vercel
+.vercel
+
+# OS
+.DS_Store
+
+# HTMLs grandes de backup
+*.bak
+*.tmp
