@@ -58,6 +58,7 @@ import psycopg2
 import psycopg2.extras
 import requests
 from flask import Flask, Response, request, redirect, make_response
+from werkzeug.exceptions import HTTPException
 
 # ─────────────────────────────────────────────────────────────────────────────
 # Config
@@ -389,6 +390,43 @@ def api_me():
     if not s:
         return _err(401, "Não autenticado.")
     return _json({"ok": True, "email": s["e"], "nome": s.get("n")})
+
+
+@app.errorhandler(Exception)
+def _on_error(e):
+    if isinstance(e, HTTPException):
+        return e
+    return _json({"ok": False, "error": f"{type(e).__name__}: {e}"}, 500)
+
+
+@app.get("/api/health")
+def api_health():
+    """Diagnóstico público: confere env vars e testa a conexão ao banco."""
+    info = {
+        "ok": True,
+        "env": {
+            "DATABASE_URL": bool(DATABASE_URL),
+            "TASKS_USERNAME": bool(TASKS_USER),
+            "TASKS_PASSWORD": bool(TASKS_PASS),
+            "TASKS_SC_BASE_URL": TASKS_BASE,
+            "SESSION_SECRET": SESSION_SECRET != "dev-insecure-secret-change-me",
+        },
+        "db": False,
+    }
+    # pista do host do banco, sem expor senha
+    try:
+        host = re.search(r"@([^/:?]+)", DATABASE_URL)
+        info["db_host"] = host.group(1) if host else None
+        info["db_port"] = (re.search(r":(\d+)/", DATABASE_URL) or [None, None])[1]
+    except Exception:
+        pass
+    try:
+        row = q("select 1 as ok", one=True)
+        info["db"] = bool(row and row.get("ok") == 1)
+    except Exception as e:
+        info["ok"] = False
+        info["db_error"] = f"{type(e).__name__}: {e}"
+    return _json(info, 200)
 
 
 # ─────────────────────────────────────────────────────────────────────────────

@@ -46,10 +46,11 @@
     try{
       const r=await fetch('/api/login',{method:'POST',headers:{'Content-Type':'application/json'},
         body:JSON.stringify({email:email.value.trim(),senha:senha.value})});
-      const d=await r.json();
+      const t=await r.text();let d={};try{d=JSON.parse(t)}catch(_){}
       if(r.ok&&d.ok){location.href='/';}
-      else{msg.textContent=d.error||'Falha no login.';btn.disabled=false;btn.textContent='Entrar';}
-    }catch(err){msg.textContent='Erro de conexão.';btn.disabled=false;btn.textContent='Entrar';}
+      else{msg.textContent=d.error||('Falha ('+r.status+') '+t.slice(0,140));
+           btn.disabled=false;btn.textContent='Entrar';}
+    }catch(err){msg.textContent='Sem resposta do servidor: '+err;btn.disabled=false;btn.textContent='Entrar';}
   });
 </script>
 </body>
