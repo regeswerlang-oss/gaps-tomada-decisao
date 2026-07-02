@@ -207,6 +207,44 @@ def require_auth():
     return _err(401, "Não autenticado.")
 
 
+# ── Controle de acesso por CLIENTE (customer) ────────────────────────────────
+# Regra (modo estrito, igual ao dashboard Next.js do cockpit):
+#   admin           → None  = vê TODOS os clientes.
+#   usuário comum   → set de customers liberados (pode ser vazio = não vê nada).
+def allowed_customers():
+    email = current_user()
+    if not email:
+        return set()
+    row = q("select coalesce(is_admin,false) as adm from cockpit.usuarios_login "
+            "where lower(email)=%s", (email.lower(),), one=True)
+    if row and row["adm"]:
+        return None
+    rows = q("select customer from cockpit.usuario_clientes where lower(email)=%s",
+             (email.lower(),))
+    return {r["customer"] for r in rows}
+
+
+def deny_customer(customer):
+    """None se o usuário pode ver este customer; senão Response 403."""
+    allowed = allowed_customers()
+    if allowed is None or customer in allowed:
+        return None
+    return _err(403, "Sem acesso a este cliente.")
+
+
+def deny_uuid(uuid):
+    """Bloqueia acesso a um ticket cujo customer não está liberado."""
+    allowed = allowed_customers()
+    if allowed is None:
+        return None
+    row = q("select customer from cockpit.tickets where uuid_ticket=%s",
+            (uuid.upper(),), one=True)
+    cust = row["customer"] if row else None
+    if cust and cust in allowed:
+        return None
+    return _err(403, "Sem acesso a este ticket.")
+
+
 def verify_scrypt(stored: str, senha: str) -> bool:
     """Formato: scrypt$<salt hex 16B>$<hash hex 64B>. r=8, p=1; N auto-detectado."""
     try:
@@ -461,8 +499,11 @@ def api_clientes():
         group by c.customer, c.nome, c.tipo, c.saude
         order by c.nome
     """)
+    allowed = allowed_customers()
     clientes = []
     for r in rows:
+        if allowed is not None and r["customer"] not in allowed:
+            continue  # cliente não liberado some da lista
         clientes.append({
             "customer": r["customer"], "nome": r["nome"], "tipo": r["tipo"],
             "saude": r["saude"], "n_tickets": r["n_tickets"],
@@ -503,6 +544,8 @@ def api_tickets():
     customer, nome = _resolve_customer(chave)
     if not customer:
         return _err(404, f"Cliente '{chave}' não encontrado.")
+    if (d := deny_customer(customer)):
+        return d
     rows = q("""
         select t.*,
                (select array_agg(tt.raw_tag order by tt.raw_tag)
@@ -580,6 +623,8 @@ def api_decisoes_get():
     customer, nome = _resolve_customer(chave)
     if not customer:
         return _err(404, f"Cliente '{chave}' não encontrado.")
+    if (d := deny_customer(customer)):
+        return d
     rows = q("""
         select d.uuid_ticket, d.decisao, d.estimativa, d.observacao, d.classe,
                d.decided_by, d.updated_at, t.raw->>'id' as ticket_id
@@ -624,6 +669,8 @@ def api_decisoes_post():
     customer, nome = _resolve_customer(chave)
     if not customer:
         return _err(404, f"Cliente '{chave}' não encontrado.")
+    if (d := deny_customer(customer)):
+        return d
     body = request.get_json(silent=True) or {}
     decisoes = body.get("decisoes")
     if not isinstance(decisoes, dict):
@@ -686,6 +733,8 @@ def _is_prefixed(entry, prefix):
 def api_ticket_detail(uuid):
     if (r := require_auth()):
         return r
+    if (g := deny_uuid(uuid)):
+        return g
     data, code, err = tasks_request("GET", f"/tickets/{uuid}")
     if code != 200:
         return _err(code or 500, f"Falha lendo ticket: {err}")
@@ -699,6 +748,8 @@ def api_ticket_detail(uuid):
 def api_ticket_history(uuid):
     if (r := require_auth()):
         return r
+    if (g := deny_uuid(uuid)):
+        return g
     data, code, err = tasks_request("GET", f"/tickets/history/list/{uuid}",
                                     params={"order": "-date,-time", "_t": int(time.time())})
     if code != 200 or not isinstance(data, dict):
@@ -777,6 +828,8 @@ def _resync_tags(uuid):
 def api_ticket_update(uuid):
     if (r := require_auth()):
         return r
+    if (g := deny_uuid(uuid)):
+        return g
     changes = request.get_json(silent=True)
     if not isinstance(changes, dict) or not changes:
         return _err(400, "Body vazio — envie os campos a alterar.")
@@ -794,6 +847,8 @@ def api_ticket_update(uuid):
 def api_ticket_history_post(uuid):
     if (r := require_auth()):
         return r
+    if (g := deny_uuid(uuid)):
+        return g
     body = request.get_json(silent=True) or {}
     html = (body.get("body_html") or "").strip()
     if not html or not _strip_html(html):
@@ -840,6 +895,8 @@ def api_refresh():
     customer, nome = _resolve_customer(chave)
     if not customer:
         return _err(404, f"Cliente '{chave}' não encontrado.")
+    if (d := deny_customer(customer)):
+        return d
     started = time.time()
     processed = upserted = 0
     page = 1
@@ -910,6 +967,9 @@ def api_gmail_draft():
     if (r := require_auth()):
         return r
     body = request.get_json(silent=True) or {}
+    _u = body.get("uuid_ticket") or body.get("uuid")
+    if _u and (g := deny_uuid(_u)):
+        return g
     tipo = body.get("tipo") or "custom"
     if tipo not in ("cobrar_cliente", "confirmar_andamento", "cobrar_responsavel", "custom"):
         tipo = "custom"
