@@ -237,7 +237,7 @@ let groupBy = "categoria", searchTerm = "", currentFilter = "all";
 let dirty = false;
 
 function toast(msg, cls){ const t=$("#toast"); t.className="toast show "+(cls||""); t.textContent=msg; clearTimeout(t._t); t._t=setTimeout(()=>t.className="toast",2200); }
-const GAPS_BASE = "/gaps"; // rotas próprias do Gaps vivem sob /gaps na 8082 (gmail vai direto ao backend unificado)
+const GAPS_BASE = ""; // Vercel: API na mesma origem, sem prefixo /gaps
 function _gapsURL(path){ return path.indexOf("/api/gmail/")===0 ? path : (GAPS_BASE + path); }
 async function api(path, opts){ const r=await fetch(_gapsURL(path),opts); const j=await r.json().catch(()=>({ok:false,error:"resposta inválida"})); if(!r.ok||j.ok===false) throw new Error(j.error||("HTTP "+r.status)); return j; }
 

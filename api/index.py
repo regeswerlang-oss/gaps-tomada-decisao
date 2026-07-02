@@ -93,6 +93,23 @@ ALLOWED_PUT = {
 
 app = Flask(__name__)
 
+
+class _StripGapsPrefix:
+    """Compat: telas antigas chamam /gaps/api/... — removemos o prefixo /gaps
+    antes do roteamento, para que /gaps/api/x e /api/x apontem ao mesmo lugar."""
+
+    def __init__(self, wsgi_app):
+        self.wsgi_app = wsgi_app
+
+    def __call__(self, environ, start_response):
+        p = environ.get("PATH_INFO", "")
+        if p == "/gaps" or p.startswith("/gaps/"):
+            environ["PATH_INFO"] = p[len("/gaps"):] or "/"
+        return self.wsgi_app(environ, start_response)
+
+
+app.wsgi_app = _StripGapsPrefix(app.wsgi_app)
+
 # ─────────────────────────────────────────────────────────────────────────────
 # Helpers gerais
 # ─────────────────────────────────────────────────────────────────────────────
