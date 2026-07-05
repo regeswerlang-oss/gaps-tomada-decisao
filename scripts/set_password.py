@@ -18,10 +18,12 @@ N, R, P, DKLEN = 16384, 8, 1, 64
 
 
 def make_hash(senha: str) -> str:
-    salt = os.urandom(16)
-    dk = hashlib.scrypt(senha.encode(), salt=salt, n=N, r=R, p=P, dklen=DKLEN,
-                        maxmem=132 * 1024 * 1024)
-    return f"scrypt${salt.hex()}${dk.hex()}"
+    # Compatível com o Node do Cockpit: scryptSync(pw, saltString, 64) usa o salt
+    # como STRING (o hex em UTF-8). Geramos igual para o hash valer nos dois apps.
+    salt_hex = os.urandom(16).hex()
+    dk = hashlib.scrypt(senha.encode(), salt=salt_hex.encode(), n=N, r=R, p=P,
+                        dklen=DKLEN, maxmem=132 * 1024 * 1024)
+    return f"scrypt${salt_hex}${dk.hex()}"
 
 
 if __name__ == "__main__":

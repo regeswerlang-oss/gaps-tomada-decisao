@@ -246,27 +246,39 @@ def deny_uuid(uuid):
 
 
 def verify_scrypt(stored: str, senha: str) -> bool:
-    """Formato: scrypt$<salt hex 16B>$<hash hex 64B>. r=8, p=1; N auto-detectado."""
+    """Formato: scrypt$<salt hex>$<hash hex>.
+
+    COMPATÍVEL com o Node do Cockpit: `scryptSync(pw, saltString, 64)` passa o
+    salt como STRING (o próprio hex em UTF-8), N=16384, r=8, p=1. Tentamos essa
+    variante primeiro (a real) e, como fallback, o salt decodificado de hex
+    (formato antigo do set_password.py do Gaps).
+    """
     try:
         scheme, salt_hex, hash_hex = stored.split("$", 2)
     except ValueError:
         return False
     if scheme != "scrypt":
         return False
-    salt = bytes.fromhex(salt_hex)
     dklen = len(hash_hex) // 2
     r = int(os.environ.get("SCRYPT_R", 8))
     p = int(os.environ.get("SCRYPT_P", 1))
     env_n = os.environ.get("SCRYPT_N")
     n_candidates = [int(env_n)] if env_n else [16384, 32768, 8192, 65536, 4096]
-    for n in n_candidates:
-        try:
-            dk = hashlib.scrypt(senha.encode(), salt=salt, n=n, r=r, p=p,
-                                dklen=dklen, maxmem=132 * 1024 * 1024)
-        except Exception:
-            continue
-        if hmac.compare_digest(dk.hex(), hash_hex):
-            return True
+    salt_variants = [salt_hex.encode()]          # utf8 do hex (Node/Cockpit) ← real
+    try:
+        salt_variants.append(bytes.fromhex(salt_hex))   # hex decodificado (legado)
+    except ValueError:
+        pass
+    pw = senha.encode()
+    for salt in salt_variants:
+        for n in n_candidates:
+            try:
+                dk = hashlib.scrypt(pw, salt=salt, n=n, r=r, p=p,
+                                    dklen=dklen, maxmem=132 * 1024 * 1024)
+            except Exception:
+                continue
+            if hmac.compare_digest(dk.hex(), hash_hex):
+                return True
     return False
 
 
