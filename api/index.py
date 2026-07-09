@@ -326,6 +326,55 @@ def tasks_request(method, path, params=None, body=None, _retry=True):
     return data, r.status_code, err
 
 
+_TAG_CATALOG_CACHE = {"map": None, "exp": 0}
+
+
+def _tags_catalog_map():
+    """{NOME_TAG_UPPER: id} do catálogo completo do Tasks SC (cacheado 10 min)."""
+    now = time.time()
+    if _TAG_CATALOG_CACHE["map"] is not None and _TAG_CATALOG_CACHE["exp"] > now:
+        return _TAG_CATALOG_CACHE["map"]
+    m, page = {}, 1
+    while page <= 25:
+        data, code, _ = tasks_request("GET", "/tickets/tags", params={
+            "page": page, "pageSize": 200, "order": "tag", "fields": "id,tag"})
+        if code != 200 or not isinstance(data, dict):
+            break
+        for it in (data.get("items") or []):
+            if it.get("tag"):
+                m[str(it["tag"]).strip().upper()] = it["id"]
+        if not data.get("hasNext"):
+            break
+        page += 1
+    if m:
+        _TAG_CATALOG_CACHE["map"] = m
+        _TAG_CATALOG_CACHE["exp"] = now + 600
+    return m
+
+
+def _resolve_tag_ids(values, current_tag_items):
+    """A tela manda NOMES de tag; o PUT exige IDs (zero-padded). Traduz nome→id
+    usando as tags atuais do ticket (garante que nenhuma existente se perca) +
+    o catálogo completo (para tags novas). Valores que já são ID passam direto."""
+    name2id = {}
+    for t in (current_tag_items or []):
+        if t.get("tag"):
+            name2id[str(t["tag"]).strip().upper()] = t["id"]
+    try:
+        for nm, tid in _tags_catalog_map().items():
+            name2id.setdefault(nm, tid)
+    except Exception:
+        pass
+    out, seen = [], set()
+    for x in values:
+        s = str(x).strip()
+        tid = s if re.fullmatch(r"\d{3,}", s) else name2id.get(s.upper())
+        if tid and tid not in seen:
+            seen.add(tid)
+            out.append(tid)
+    return out
+
+
 def tasks_update(uuid, changes):
     """GET → merge → PUT (a API não tem PATCH)."""
     unknown = set(changes) - ALLOWED_PUT
@@ -339,7 +388,13 @@ def tasks_update(uuid, changes):
         raise RuntimeError("Ticket não encontrado.")
     current = items[0]
     tag_data, tcode, terr = tasks_request("GET", f"/tickets/tags/{uuid}")
-    tag_ids = [t["id"] for t in (tag_data.get("items") or [])] if tcode == 200 else []
+    tag_data_items = tag_data.get("items") or [] if tcode == 200 else []
+    tag_ids = [t["id"] for t in tag_data_items]
+    # A tela envia NOMES de tag; o PUT exige IDs. Traduz antes do merge — sem isso
+    # o Tasks SC devolve HTTP 400 ("PUT /tickets falhou").
+    if "tags" in changes:
+        changes = dict(changes)
+        changes["tags"] = _resolve_tag_ids(changes["tags"], tag_data_items)
     payload = {
         "uuid": current["uuid"], "id": current["id"],
         "title": current.get("title", "") or "",
@@ -767,6 +822,25 @@ def api_ticket_history(uuid):
     if code != 200 or not isinstance(data, dict):
         return _err(code or 500, f"Falha lendo histórico: {err}")
     items = data.get("items") or []
+    # anexa as Observações salvas no banco (fallback quando o Tasks SC recusou o
+    # texto). Ficam no topo, mais recentes primeiro; como as de personalização
+    # começam com a marca PERSONALIZACAO:, caem no bucket `tec` automaticamente.
+    try:
+        obs = q("""select details, autor, created_at from cockpit.observacoes
+                   where uuid_ticket=%s order by created_at desc""", (uuid.upper(),))
+        formatted = []
+        for o in (obs or []):
+            ca = o.get("created_at")
+            formatted.append({
+                "details": o["details"],
+                "date": ca.strftime("%Y%m%d") if ca else "",
+                "time": ca.strftime("%H:%M") if ca else "",
+                "user_name": ((o.get("autor") or "") + " · (banco)").strip(" ·"),
+                "type": "1", "uuid_history": "", "_db": True,
+            })
+        items = formatted + items
+    except Exception:
+        pass
     nlm = [i for i in items if _is_prefixed(i, NLM_PREFIX)]
     tec = [i for i in items if _is_prefixed(i, TEC_PREFIX)]
     return _json({"ok": True, "uuid": uuid, "items": items, "nlm": nlm, "tec": tec})
@@ -879,7 +953,22 @@ def api_ticket_history_post(uuid):
                "details": details, "duration": ""}
     data, code, err = tasks_request("POST", "/tickets/history", body=payload)
     if code >= 400:
-        return _err(code or 500, f"Falha gravando ocorrência: {err}")
+        # O campo do Tasks SC recusou (HTTP 400 típico de texto grande demais).
+        # Em vez de perder o conteúdo, gravamos como Observação no banco (Supabase)
+        # e a tela volta a exibir via GET /history (bucket tec/histórico).
+        tipo_obs = "historico" if body.get("raw") else "personalizacao"
+        try:
+            execute("""insert into cockpit.observacoes (uuid_ticket, tipo, details, autor)
+                       values (%s,%s,%s,%s)""",
+                    (uuid.upper(), tipo_obs, details, current_user()))
+        except Exception as e:
+            return _err(code or 500,
+                        f"Falha gravando no Tasks SC ({err}) e no banco ({e}).")
+        return _json({"ok": True, "uuid": uuid, "details": details,
+                      "saved_to": "db",
+                      "aviso": ("O Tasks SC recusou o texto (HTTP 400 — provável "
+                                "limite de tamanho do campo). Salvo como Observação "
+                                "no banco; aparece aqui normalmente.")})
     # espelho best-effort em cockpit.ocorrencias
     try:
         uhist = ""

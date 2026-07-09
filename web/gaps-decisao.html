@@ -637,8 +637,9 @@ function bindBody(t){
       tecCache[t.uuid] = [{details:j.details, date:"", time:"", user_name:"você"}, ...(tecCache[t.uuid]||[])];
       delete histCache[t.uuid];   // força reler o histórico na próxima abertura
       fillTec(t);
-      $("#dTecMeta").textContent = "Gravado como ocorrência interna às "+new Date().toLocaleTimeString("pt-BR");
-      toast(`#${t.id} — especificação gravada no histórico ✓`,"ok");
+      const noBanco = j.saved_to==="db";
+      $("#dTecMeta").textContent = (noBanco?"Salvo como Observação no banco":"Gravado como ocorrência interna")+" às "+new Date().toLocaleTimeString("pt-BR");
+      toast(noBanco ? `#${t.id} — texto grande: salvo como Observação no banco ✓` : `#${t.id} — especificação gravada no histórico ✓`, "ok");
     }catch(e){ toast("Falha ao gravar: "+e.message,"err"); }
     b.disabled = false; b.textContent = "📌 Gravar ocorrência interna";
   };
