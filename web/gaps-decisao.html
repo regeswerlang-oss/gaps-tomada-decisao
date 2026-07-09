@@ -323,11 +323,22 @@ function colOf(t){
   if(Number(t.time_estimate)>0) return "estimado";
   return "analise";
 }
+// Etapa PRINCIPAL do card — a mesma prioridade que decide a coluna. Um GAP tem
+// várias tags de etapa ao mesmo tempo (quase todos têm GAP), então o filtro por
+// etapa precisa olhar a etapa que manda, não "tem alguma tag". Assim o chip e a
+// coluna ficam coerentes: desmarcar "Orçamento Pendente" esvazia essa coluna.
+function etapaPrincipal(t){
+  const tg = tagsOf(t);
+  if(tg.includes("LEVANTAR REQUISITOS")) return "LEVANTAR REQUISITOS";
+  if(tg.includes("LEVANTAMENTO")) return "LEVANTAMENTO";
+  if(tg.includes("ORCAMENTO PENDENTE")) return "ORCAMENTO PENDENTE";
+  return "GAP";   // sem etapa específica → colunas Em Análise / Estimado
+}
 function visiveis(){
   return tickets.filter(t=>{
     if(!isFoco(t)) return false;
     if(!showClosed && CLOSED.has(t.status)) return false;
-    if(![...etapasOn].some(e=>tagsOf(t).includes(e))) return false;
+    if(!etapasOn.has(etapaPrincipal(t))) return false;
     if(clsOn.size && !CLASSES.some(c=>clsOn.has(c)&&tagsOf(t).includes(c))) return false;
     if(onlySemEst && Number(t.time_estimate)>0) return false;
     if(onlyPendCons && !tagsOf(t).includes(PEND_CONS_TAG)) return false;

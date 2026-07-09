@@ -73,7 +73,7 @@ button{font-family:inherit;cursor:pointer}
 .classif.open .classif-body{display:block}
 
 /* Group */
-.group{margin-top:12px;background:#fff;border:1px solid #EDF1F4;border-radius:10px;overflow:hidden}
+.group{margin-top:14px;background:#fff;border:1px solid #E3EAF0;border-radius:12px;overflow:hidden;box-shadow:0 1px 3px rgba(12,35,64,.05)}
 .group-head{display:grid;grid-template-columns:1fr auto auto auto;gap:12px;align-items:center;padding:10px 14px;cursor:pointer}
 .group-head:hover{background:#F4F8FB}
 .group-head .gn{font-size:13px;font-weight:700;color:var(--navy)}
@@ -81,11 +81,11 @@ button{font-family:inherit;cursor:pointer}
 .group-head .gh{font-size:11.5px;color:var(--gray);font-weight:600;min-width:38px;text-align:right}
 .group-progress{width:90px;height:5px;background:#EDF1F4;border-radius:3px;overflow:hidden;display:flex}
 .group.open .group-head .chev{transform:rotate(180deg)}
-.group-body{display:none;padding:8px 10px 12px;background:#FAFCFD;border-top:1px solid #EDF1F4}
-.group.open .group-body{display:grid;grid-template-columns:repeat(auto-fill,minmax(430px,1fr));gap:10px;align-items:start}
+.group-body{display:none;padding:14px 16px 16px;background:#FAFCFD;border-top:1px solid #EDF1F4}
+.group.open .group-body{display:grid;grid-template-columns:repeat(auto-fill,minmax(min(100%,440px),1fr));gap:14px;align-items:stretch}
 
 /* Task card */
-.task{background:#fff;border:1px solid #EDF1F4;border-radius:10px;padding:13px 15px;border-left:4px solid #DCE3E8;transition:all .2s}
+.task{background:#fff;border:1px solid #EDF1F4;border-radius:10px;padding:15px 17px;border-left:4px solid #DCE3E8;transition:all .2s;display:flex;flex-direction:column;height:100%}
 .task.open-details,.task.has-note{grid-column:1/-1}
 .task.decided-approve{border-left-color:var(--approve);background:linear-gradient(90deg,#F0FAF5,#fff 55%)}
 .task.decided-phase2{border-left-color:var(--phase2);background:linear-gradient(90deg,#FFF7EC,#fff 55%)}
@@ -107,7 +107,7 @@ button{font-family:inherit;cursor:pointer}
 .task-hours .h .u{font-size:10px;color:var(--gray);font-weight:500}
 .task-hours .h.noest{color:var(--refuse);font-size:12px}
 .task-hours .l{font-size:9px;color:var(--gray);text-transform:uppercase;letter-spacing:.4px;font-weight:600;margin-top:2px}
-.task-actions{display:flex;gap:7px;margin-top:11px;flex-wrap:wrap;align-items:center}
+.task-actions{display:flex;gap:7px;margin-top:auto;padding-top:12px;flex-wrap:wrap;align-items:center}
 .btn-decide{padding:8px 13px;border:1.5px solid;border-radius:8px;font-size:12px;font-weight:700;background:#fff;display:inline-flex;align-items:center;gap:5px;transition:all .15s}
 .btn-approve{border-color:var(--approve);color:var(--approve)} .btn-approve:hover:not(:disabled),.btn-approve.active{background:var(--approve);color:#fff}
 .btn-phase2{border-color:var(--phase2);color:var(--phase2)} .btn-phase2:hover:not(:disabled),.btn-phase2.active{background:var(--phase2);color:#fff}
