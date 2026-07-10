@@ -217,6 +217,7 @@ footer b{color:var(--navy)}
     </div>
   </div>
   <button class="chip" id="chipPendCons" data-onlypendcons>⏸ Pendente Consultoria</button>
+  <button class="chip" id="chipRestTec" data-onlyresttec>🔧 Restrição Técnica</button>
   <button class="chip" id="chipSemEst" data-onlysemest>⏱ Sem estimativa</button>
   <label><input type="checkbox" id="chkClosed"> mostrar resolvidos/cancelados</label>
 </div>
@@ -279,10 +280,11 @@ let histCache = {};        // uuid → items
 let tagCatalog = [];       // [{id,tag}]
 let etapasOn = new Set(ETAPAS);
 let clsOn = new Set();     // vazio = todas
-let busca = "", showClosed = false, onlySemEst = false, onlyPendCons = false;
+let busca = "", showClosed = false, onlySemEst = false, onlyPendCons = false, onlyRestTec = false;
 let tagFilterSel = new Set();   // tags selecionadas no filtro múltiplo
 let tagFilterMode = "and";      // "and" = contém todas · "or" = contém qualquer
 const PEND_CONS_TAG = "PENDENCIA CONSULTOR";
+const REST_TEC_TAG = "RESTRICAO TECNICA";
 let openUuid = null;
 
 const $ = s => document.querySelector(s);
@@ -348,6 +350,7 @@ function visiveis(){
     if(clsOn.size && !CLASSES.some(c=>clsOn.has(c)&&tagsOf(t).includes(c))) return false;
     if(onlySemEst && Number(t.time_estimate)>0) return false;
     if(onlyPendCons && !tagsOf(t).includes(PEND_CONS_TAG)) return false;
+    if(onlyRestTec && !tagsOf(t).includes(REST_TEC_TAG)) return false;
     if(tagFilterSel.size){
       const tg = tagsOf(t);
       const ok = tagFilterMode==="or"
@@ -986,6 +989,7 @@ $("#filters").addEventListener("click", ev=>{
   if(b.dataset.cls){ b.classList.contains("on") ? clsOn.add(b.dataset.cls) : clsOn.delete(b.dataset.cls); }
   if(b.hasAttribute("data-onlysemest")) onlySemEst = b.classList.contains("on");
   if(b.hasAttribute("data-onlypendcons")) onlyPendCons = b.classList.contains("on");
+  if(b.hasAttribute("data-onlyresttec")) onlyRestTec = b.classList.contains("on");
   render();
 });
 
