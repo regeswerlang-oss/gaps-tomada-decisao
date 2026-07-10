@@ -942,6 +942,9 @@ function bindTagAutocomplete(t){
     const jaTem = cur();
     let list = tagCatalog.filter(x=> x.tag && !jaTem.includes(String(x.tag).toUpperCase()));
     if(q) list = list.filter(x=> String(x.tag).toUpperCase().includes(q));
+    // de-duplica (o catálogo pode vir com a mesma tag repetida)
+    const vistos = new Set();
+    list = list.filter(x=>{ const k=String(x.id||x.tag).toUpperCase(); if(vistos.has(k)) return false; vistos.add(k); return true; });
     if(q) list.sort((a,b)=>
       (String(a.tag).toUpperCase().startsWith(q)?0:1) - (String(b.tag).toUpperCase().startsWith(q)?0:1));
     list = list.slice(0,30);

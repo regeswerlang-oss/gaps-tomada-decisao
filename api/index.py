@@ -863,6 +863,17 @@ def api_tags_catalog():
         if not data.get("hasNext"):
             break
         page += 1
+    # o endpoint devolve uma linha por associação → de-duplica por id (mesma tag
+    # aparecia várias vezes no picker). Mantém a 1ª ocorrência, ordenado por nome.
+    seen, uniq = set(), []
+    for it in items:
+        k = it.get("id") or (it.get("tag") or "").upper()
+        if not k or k in seen:
+            continue
+        seen.add(k)
+        uniq.append(it)
+    uniq.sort(key=lambda i: (i.get("tag") or "").upper())
+    items = uniq
     if search:
         items = [i for i in items if search in (i.get("tag") or "").upper()]
     return _json({"ok": True, "items": items})
