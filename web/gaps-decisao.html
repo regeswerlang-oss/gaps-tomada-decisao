@@ -63,7 +63,9 @@ header input::placeholder{color:#9FB2CC}
 .filters label{font-size:12px;color:var(--muted);display:flex;align-items:center;gap:5px}
 
 /* ── Board ── */
-.board{display:grid;grid-template-columns:repeat(4,1fr);gap:12px;padding:10px 20px 30px;align-items:start}
+.board{display:grid;grid-template-columns:repeat(5,minmax(0,1fr));gap:12px;padding:10px 20px 30px;align-items:start}
+@media(max-width:1500px){.board{grid-template-columns:repeat(3,minmax(0,1fr))}}
+@media(max-width:1000px){.board{grid-template-columns:repeat(2,minmax(0,1fr))}}
 .col{background:#ECECF4;border-radius:12px;padding:10px;min-height:200px}
 .col.dragover{outline:2px dashed var(--roxo);outline-offset:-4px}
 .col h3{font-size:12.5px;text-transform:uppercase;letter-spacing:.8px;color:var(--navy);padding:4px 6px 10px;display:flex;justify-content:space-between}
@@ -86,6 +88,8 @@ header input::placeholder{color:#9FB2CC}
 .bdg.doc{background:#FFF3DD;color:#A06B00}
 .bdg.cls{background:var(--cinza);color:var(--muted)}
 .bdg.stat{background:#E6EDF7;color:var(--navy)}
+.ctags{display:flex;gap:4px;flex-wrap:wrap;margin-top:6px}
+.ctag{font-size:9.5px;font-weight:700;background:#EEF0FA;color:#5B5B86;border-radius:5px;padding:2px 6px;letter-spacing:.2px}
 
 /* ── Drawer ── */
 .overlay{position:fixed;inset:0;background:rgba(12,35,64,.45);z-index:50;display:none}
@@ -267,6 +271,7 @@ const COLS = [
   {key:"levantar", titulo:"📋 Levantar Requisitos", desc:"requisitos pendentes"},
   {key:"orcamento", titulo:"💰 Orçamento Pendente", desc:"aguardando orçamento"},
   {key:"analise",  titulo:"🔍 Em Análise", desc:"sem estimativa definida"},
+  {key:"aguardcli",titulo:"⏳ Aguardando Cliente", desc:"aguardando retorno do cliente"},
   {key:"estimado", titulo:"✅ Estimado / Decidido", desc:"com estimativa"},
 ];
 
@@ -326,6 +331,7 @@ const isFoco = t => tagsOf(t).some(tg=>ETAPAS.includes(tg));
 const classeOf = t => CLASSES.find(c=>tagsOf(t).includes(c)) || "";
 function colOf(t){
   const tg = tagsOf(t);
+  if(tg.includes("AGUARDANDO CLIENTE")) return "aguardcli";
   if(tg.includes("LEVANTAR REQUISITOS")||tg.includes("LEVANTAMENTO")) return "levantar";
   if(tg.includes("ORCAMENTO PENDENTE")) return "orcamento";
   if(Number(t.time_estimate)>0) return "estimado";
@@ -402,7 +408,7 @@ function render(){
     <div class="kpi"><div class="num" style="color:var(--ok)">${comNlm.length}</div><div class="lbl">Com análise NotebookLM</div></div>
     <div class="kpi"><div class="num" style="color:var(--warn)">${orc.length}</div><div class="lbl">Orçamento pendente</div></div>`;
   // Board
-  const byCol = {levantar:[],orcamento:[],analise:[],estimado:[]};
+  const byCol = {levantar:[],orcamento:[],analise:[],aguardcli:[],estimado:[]};
   vis.forEach(t=>byCol[colOf(t)].push(t));
   $("#board").innerHTML = COLS.map(c=>`
     <div class="col" data-col="${c.key}" ondragover="event.preventDefault();this.classList.add('dragover')"
@@ -412,12 +418,16 @@ function render(){
     </div>`).join("");
 }
 
+const CARD_STRUCT_TAGS = new Set([...ETAPAS, "AGUARDANDO CLIENTE", ...CLASSES]);
 function cardHtml(t){
   const cls = classeOf(t);
   const est = Number(t.time_estimate)||0;
   const nlm = nlmCache[t.uuid];
   const docs = (driveIdx[clienteAtual]?.por_task||{})[t.id];
   const closed = CLOSED.has(t.status);
+  // tags "livres" do card: exclui etapa/aguardando e classificação (já indicadas
+  // pela coluna, pela cor da borda e pelo badge de classificação).
+  const freeTags = (t.tags||[]).filter(tg=>!CARD_STRUCT_TAGS.has(String(tg).toUpperCase()));
   return `<div class="card ${cls} ${closed?"closed":""}" draggable="true"
        ondragstart="event.dataTransfer.setData('text/plain','${t.uuid}')"
        onclick="openDrawer('${t.uuid}')">
@@ -428,7 +438,9 @@ function cardHtml(t){
       ${cls?`<span class="bdg cls">${cls}</span>`:""}
       ${nlm===undefined?"":(nlm.count>0?`<span class="bdg nlm">📖 NLM ✓</span>`:"")}
       ${docs?`<span class="bdg doc">📄 Drive</span>`:""}
-    </div></div>`;
+    </div>
+    ${freeTags.length?`<div class="ctags">${freeTags.map(tg=>`<span class="ctag">${esc(tg)}</span>`).join("")}</div>`:""}
+  </div>`;
 }
 
 /* ════════════════ Prefetch NotebookLM (fila, 2 por vez) ════════════════ */
@@ -472,10 +484,11 @@ async function prefetchDescricoes(){
 
 /* ════════════════ Drag & drop (gestão ágil de tags) ════════════════ */
 const DROP_RULES = {
-  levantar:{add:["LEVANTAR REQUISITOS"],remove:["ORCAMENTO PENDENTE"]},
-  orcamento:{add:["ORCAMENTO PENDENTE"],remove:["LEVANTAR REQUISITOS","LEVANTAMENTO"]},
-  analise:{add:[],remove:["LEVANTAR REQUISITOS","LEVANTAMENTO","ORCAMENTO PENDENTE"]},
-  estimado:{add:[],remove:["ORCAMENTO PENDENTE"]},
+  levantar:{add:["LEVANTAR REQUISITOS"],remove:["ORCAMENTO PENDENTE","AGUARDANDO CLIENTE"]},
+  orcamento:{add:["ORCAMENTO PENDENTE"],remove:["LEVANTAR REQUISITOS","LEVANTAMENTO","AGUARDANDO CLIENTE"]},
+  analise:{add:[],remove:["LEVANTAR REQUISITOS","LEVANTAMENTO","ORCAMENTO PENDENTE","AGUARDANDO CLIENTE"]},
+  aguardcli:{add:["AGUARDANDO CLIENTE"],remove:[]},
+  estimado:{add:[],remove:["ORCAMENTO PENDENTE","AGUARDANDO CLIENTE"]},
 };
 async function onDrop(ev, col){
   ev.preventDefault();
@@ -568,6 +581,7 @@ function bodyHtml(t){
       </div>
       <div style="margin-top:8px">
         <button class="chip" id="dPendCons" style="${tagsOf(t).includes(PEND_CONS_TAG)?"border-color:#A06B00;background:#FFF3DD;color:#A06B00":""}">⏸ Pendente Consultoria</button>
+        <button class="chip" id="dRestTec" style="${tagsOf(t).includes(REST_TEC_TAG)?"border-color:#1E5FBF;background:#E7F0FF;color:#1E5FBF":""}">🔧 Restrição Técnica</button>
       </div>
     </div>
     <div class="sec"><h4>Decisão &amp; Estimativa <span class="ln"></span></h4>
@@ -639,6 +653,14 @@ function bindBody(t){
     await saveTags(t, novas, tem?`− ${PEND_CONS_TAG}`:`+ ${PEND_CONS_TAG}`);
     const on = tagsOf(t).includes(PEND_CONS_TAG);
     $("#dPendCons").style.cssText = on?"border-color:#A06B00;background:#FFF3DD;color:#A06B00":"";
+  };
+  $("#dRestTec").onclick = async ()=>{
+    const tem = tagsOf(t).includes(REST_TEC_TAG);
+    const novas = tem ? (t.tags||[]).filter(x=>String(x).toUpperCase()!==REST_TEC_TAG)
+                      : [...(t.tags||[]), REST_TEC_TAG];
+    await saveTags(t, novas, tem?`− ${REST_TEC_TAG}`:`+ ${REST_TEC_TAG}`);
+    const on = tagsOf(t).includes(REST_TEC_TAG);
+    $("#dRestTec").style.cssText = on?"border-color:#1E5FBF;background:#E7F0FF;color:#1E5FBF":"";
   };
   $("#btnDesc").onclick = async ()=>{
     const html = $("#dDesc").innerHTML;
