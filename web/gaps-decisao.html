@@ -127,8 +127,14 @@ header input::placeholder{color:#9FB2CC}
 .tagpill{background:var(--lilas);color:var(--roxo);border-radius:14px;padding:4px 10px;font-size:12px;font-weight:700;display:flex;align-items:center;gap:6px}
 .tagpill b{cursor:pointer;opacity:.6}
 .tagpill b:hover{opacity:1}
-.addtag{display:flex;gap:6px;margin-top:8px}
+.addtag{display:flex;gap:6px;margin-top:8px;position:relative}
 .addtag input{flex:1;border:1px solid #D8D8E4;border-radius:8px;padding:7px 10px}
+.tagdrop{position:absolute;top:calc(100% + 4px);left:0;right:0;background:#fff;border:1px solid #D8D8E4;border-radius:8px;box-shadow:0 10px 28px rgba(20,20,50,.16);max-height:240px;overflow-y:auto;z-index:60;display:none}
+.tagdrop.open{display:block}
+.tagdrop .opt{padding:8px 11px;font-size:12.5px;color:var(--ink,#25264a);cursor:pointer;display:flex;align-items:center;gap:8px}
+.tagdrop .opt:hover,.tagdrop .opt.active{background:var(--lilas);color:var(--roxo)}
+.tagdrop .opt .idb{font-size:10px;color:#9a9ab5;margin-left:auto}
+.tagdrop .empty{padding:9px 11px;font-size:12px;color:#9a9ab5}
 .hist{font-size:12px;border-left:3px solid var(--lilas);padding-left:10px;margin-bottom:10px}
 .hist .hmeta{color:var(--muted);font-size:11px;margin-bottom:2px}
 .hist .hbody{line-height:1.45;max-height:120px;overflow:hidden}
@@ -580,9 +586,9 @@ function bodyHtml(t){
     <div class="sec"><h4>Tags <span class="ln"></span></h4>
       <div class="tagrow" id="dTags">${(t.tags||[]).map(tagPill).join("")}</div>
       <div class="addtag">
-        <input id="dNewTag" list="tagOpts" placeholder="adicionar tag… (catálogo Tasks SC)">
-        <datalist id="tagOpts"></datalist>
+        <input id="dNewTag" autocomplete="off" placeholder="adicionar tag… (catálogo Tasks SC)">
         <button class="qbtn" id="btnAddTag">+ adicionar</button>
+        <div id="tagDrop" class="tagdrop"></div>
       </div>
     </div>
   </div>
@@ -600,7 +606,7 @@ function bodyHtml(t){
 const tagPill = tg => `<span class="tagpill" data-tag="${esc(tg)}">${esc(tg)} <b onclick="removeTag('${esc(tg)}')">✕</b></span>`;
 
 function bindBody(t){
-  fillTagDatalist();
+  bindTagAutocomplete(t);
   // classificação: exclusiva — clicar troca
   $("#dCls").querySelectorAll(".chip").forEach(ch=>{
     ch.onclick = async ()=>{
@@ -916,6 +922,58 @@ window.acHist=acHist; window.acDraft=acDraft; window.toggleHistForm=toggleHistFo
 function fillTagDatalist(){
   const dl = $("#tagOpts"); if(!dl) return;
   dl.innerHTML = tagCatalog.slice(0,500).map(x=>`<option value="${esc(x.tag)}">`).join("");
+}
+// Autocomplete próprio do campo "adicionar tag": ao digitar/focar, lista as tags
+// do catálogo do Tasks SC (filtradas) para clicar. Mais confiável que o <datalist>.
+function bindTagAutocomplete(t){
+  const inp = $("#dNewTag"), drop = $("#tagDrop");
+  if(!inp || !drop) return;
+  let active = -1;
+  const cur = () => (t.tags||[]).map(x=>String(x).toUpperCase());
+  const close = () => { drop.classList.remove("open"); drop.innerHTML=""; active=-1; };
+  function addTag(tag){
+    const novas = [...(t.tags||[])];
+    if(!novas.map(x=>x.toUpperCase()).includes(tag.toUpperCase())) novas.push(tag);
+    inp.value=""; close();
+    saveTags(t, novas, `tag +${tag}`);
+  }
+  function refresh(){
+    const q = inp.value.trim().toUpperCase();
+    const jaTem = cur();
+    let list = tagCatalog.filter(x=> x.tag && !jaTem.includes(String(x.tag).toUpperCase()));
+    if(q) list = list.filter(x=> String(x.tag).toUpperCase().includes(q));
+    if(q) list.sort((a,b)=>
+      (String(a.tag).toUpperCase().startsWith(q)?0:1) - (String(b.tag).toUpperCase().startsWith(q)?0:1));
+    list = list.slice(0,30);
+    active = -1;
+    if(!list.length){
+      drop.innerHTML = `<div class="empty">${tagCatalog.length? "nenhuma tag encontrada" : "carregando catálogo…"}</div>`;
+    }else{
+      drop.innerHTML = list.map(m=>`<div class="opt" data-tag="${esc(m.tag)}">${esc(m.tag)}<span class="idb">#${esc(m.id||"")}</span></div>`).join("");
+      drop.querySelectorAll(".opt").forEach(o=> o.onmousedown = e=>{ e.preventDefault(); addTag(o.dataset.tag); });
+    }
+    drop.classList.add("open");
+  }
+  inp.oninput = () => {
+    if(!tagCatalog.length){ api("/api/tags-catalog").then(j=>{ tagCatalog=j.items||[]; refresh(); }).catch(()=>{}); }
+    refresh();
+  };
+  inp.onfocus = refresh;
+  inp.onblur = () => setTimeout(close, 150);
+  inp.onkeydown = e => {
+    const opts = [...drop.querySelectorAll(".opt")];
+    if(e.key==="ArrowDown"){ active=Math.min(active+1, opts.length-1); }
+    else if(e.key==="ArrowUp"){ active=Math.max(active-1, 0); }
+    else if(e.key==="Enter"){
+      if(active>=0 && opts[active]){ e.preventDefault(); addTag(opts[active].dataset.tag); }
+      return;   // Enter sem seleção deixa o botão "+ adicionar" tratar
+    }
+    else if(e.key==="Escape"){ close(); return; }
+    else return;
+    e.preventDefault();
+    opts.forEach((o,i)=> o.classList.toggle("active", i===active));
+    if(opts[active]) opts[active].scrollIntoView({block:"nearest"});
+  };
 }
 $("#filters").addEventListener("click", ev=>{
   const b = ev.target.closest(".chip"); if(!b) return;

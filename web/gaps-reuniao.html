@@ -70,7 +70,7 @@ button{font-family:inherit;cursor:pointer}
 .chev{font-size:17px;color:var(--gray);transition:transform .25s}
 .classif.open .chev{transform:rotate(180deg)}
 .classif-body{display:none;border-top:1px solid #EDF1F4;padding:6px 20px 16px;background:#FAFCFD}
-.classif.open .classif-body{display:block}
+.classif.open .classif-body{display:grid;grid-template-columns:1fr;gap:14px}
 
 /* Group */
 .group{margin-top:14px;background:#fff;border:1px solid #E3EAF0;border-radius:12px;overflow:hidden;box-shadow:0 1px 3px rgba(12,35,64,.05)}
@@ -337,30 +337,21 @@ function render(){
   if(!classifs.length){ main.innerHTML = `<div class="empty-state"><div class="ic">📭</div><div class="h">Nenhum GAP</div><div>Este cliente não tem GAPs no radar.</div></div>`; return; }
 
   classifs.forEach((c, ci)=>{
-    const groups = [...c.gm.entries()].map(([n, items])=>({n, items, total:items.reduce((s,t)=>s+(Number(t.time_estimate)||0),0)}))
-                    .sort((a,b)=>b.total-a.total);
-    const groupsHTML = groups.map(g=>`
-      <div class="group" data-group="${escAttr(g.n)}">
-        <div class="group-head">
-          <div class="gn">${esc(g.n)} <span class="badge-count">${g.items.length}</span></div>
-          <div class="group-progress" data-gp></div>
-          <div class="gh">${fmtH(g.total)}h</div>
-          <span class="chev">▾</span>
-        </div>
-        <div class="group-body">${g.items.map(renderTask).join("")}</div>
-      </div>`).join("");
+    // sem subnível: cards vão direto no grupo de cima (Agrupar por), 1 por linha
+    const items = [...c.gm.values()].flat()
+                    .sort((a,b)=>(Number(b.time_estimate)||0)-(Number(a.time_estimate)||0));
     const card = document.createElement("section");
     card.className = "classif"+(ci===0?" open":"");
     card.dataset.idx = ci;
     card.innerHTML = `
       <header class="classif-head">
         <div class="classif-icon">${esc(c.name.slice(0,2).toUpperCase())}</div>
-        <div class="classif-title"><h3>${esc(c.name)}</h3><div class="desc">${c.count} GAP(s) · agrupados por ${esc(subDim==="modulo"?"módulo":"processo")}</div></div>
+        <div class="classif-title"><h3>${esc(c.name)}</h3><div class="desc">${c.count} GAP(s)</div></div>
         <div class="classif-stat"><div class="n">${c.count}</div><div class="l">GAPs</div></div>
         <div class="classif-stat"><div class="n">${fmtH(c.total)}</div><div class="l">horas</div></div>
         <div class="classif-progress-wrap"><div class="classif-progress" data-cp></div><div class="classif-progress-meta" data-cm>0% decidido</div></div>
         <span class="chev">▾</span>`+`
-      <div class="classif-body">${groupsHTML}</div>`;
+      <div class="classif-body">${items.map(renderTask).join("")}</div>`;
     main.appendChild(card);
   });
   bindEvents(); applyAll(); updateKPIs(); applyFilter(); updateProgress();
