@@ -176,6 +176,15 @@ footer{padding:18px;text-align:center;color:var(--muted);font-size:11px}
 footer b{color:var(--navy)}
 @media(max-width:1100px){.board{grid-template-columns:repeat(2,1fr)}}
 @media(max-width:640px){.board{grid-template-columns:1fr}}
+
+/* ── "Ver como" (admin simula a visão de outro usuário) ── */
+#viewAs{background:#fff;border:1px solid #D8D8E4;border-radius:8px;padding:6px 8px;font-size:12px;font-weight:600}
+#viewAs.hide{display:none}
+#simFaixa{display:none;align-items:center;gap:10px;background:#FFC53D;color:#4A3200;
+  padding:8px 20px;font-size:13px;font-weight:700}
+#simFaixa.on{display:flex}
+#simFaixa button{margin-left:auto;background:#4A3200;color:#FFF3DD;border:0;border-radius:7px;
+  padding:5px 11px;font-size:11.5px;font-weight:700;cursor:pointer}
 </style>
 
 <script src="supabase-data.js"></script>
@@ -183,9 +192,11 @@ footer b{color:var(--navy)}
 </head>
 <body>
 
+<div id="simFaixa"><span>👁</span><span id="simTxt"></span><button onclick="sairSimulacao()">Sair da simulação</button></div>
 <header>
   <div class="brand">TOTVS · SANTA CATARINA<small>TOMADA DE DECISÃO DE GAPS — ESTIMATIVA INDIVIDUALIZADA</small></div>
   <select id="selCliente" title="Cliente"></select>
+  <select id="viewAs" class="hide" title="Ver o dashboard com a visão de outro usuário"></select>
   <input type="search" id="txtBusca" placeholder="🔎 Buscar em nº, título, descrição, tags, NotebookLM, histórico…">
   <div class="spacer"></div>
   <span id="lblAtualizado" style="font-size:11px;opacity:.7"></span>
@@ -944,6 +955,39 @@ window.openAcoes=openAcoes; window.closeAcoes=closeAcoes; window.acFoco=acFoco;
 window.acHist=acHist; window.acDraft=acDraft; window.toggleHistForm=toggleHistForm;
 
 /* ════════════════ Filtros / util ════════════════ */
+
+/* ════════════════ "Ver como" — admin simula a visão de outro usuário ════════
+   A simulação só RESTRINGE o escopo (o backend reconfere se quem está logado é
+   admin de verdade). Durante a simulação, toda ESCRITA é bloqueada (HTTP 409). */
+async function initViewAs(){
+  let me; try{ me = await api("/api/me"); }catch(_){ return; }
+  const sel = document.getElementById("viewAs");
+  const faixa = document.getElementById("simFaixa");
+  if(me.view_as){
+    faixa.classList.add("on");
+    document.getElementById("simTxt").textContent =
+      `Vendo como ${me.view_as} — esta é a visão DELE. Gravações estão bloqueadas.`;
+  }
+  if(!me.is_admin) return;
+  try{
+    const {usuarios} = await api("/api/usuarios");
+    sel.classList.remove("hide");
+    sel.innerHTML = `<option value="">👁 Ver como…</option>` + usuarios.map(u=>
+      `<option value="${esc(u.email)}" ${u.email===me.view_as?"selected":""}>${esc(u.nome||u.email)}${u.is_admin?" (admin)":` · ${u.n_clientes} cli.`}</option>`).join("");
+    sel.onchange = async ()=>{
+      await api("/api/view-as",{method:"POST",headers:{"Content-Type":"application/json"},
+        body:JSON.stringify({email:sel.value||null})});
+      location.reload();
+    };
+  }catch(_){}
+}
+async function sairSimulacao(){
+  await api("/api/view-as",{method:"POST",headers:{"Content-Type":"application/json"},
+    body:JSON.stringify({email:null})});
+  location.reload();
+}
+initViewAs();
+
 function fillTagDatalist(){
   const dl = $("#tagOpts"); if(!dl) return;
   dl.innerHTML = tagCatalog.slice(0,500).map(x=>`<option value="${esc(x.tag)}">`).join("");

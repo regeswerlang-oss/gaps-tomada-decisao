@@ -172,9 +172,12 @@ def _sign(payload: str) -> str:
     return sig
 
 
-def make_session(email: str, nome: str) -> str:
+def make_session(email: str, nome: str, view_as: str | None = None) -> str:
     exp = int(time.time()) + SESSION_TTL
-    raw = json.dumps({"e": email, "n": nome, "x": exp}, ensure_ascii=False)
+    d = {"e": email, "n": nome, "x": exp}
+    if view_as:
+        d["v"] = view_as        # admin simulando a visão de outro usuário
+    raw = json.dumps(d, ensure_ascii=False)
     b = base64.urlsafe_b64encode(raw.encode()).decode()
     return f"{b}.{_sign(b)}"
 
@@ -196,8 +199,48 @@ def read_session():
 
 
 def current_user():
+    """Usuário REAL do login (nunca o simulado). É quem responde por auditoria."""
     s = read_session()
     return s.get("e") if s else None
+
+
+def is_admin(email):
+    if not email:
+        return False
+    r = q("select coalesce(is_admin,false) adm from cockpit.usuarios_login "
+          "where lower(email)=%s", (email.lower(),), one=True)
+    return bool(r and r["adm"])
+
+
+def effective_user():
+    """Usuário cuja VISÃO vale. Só honra o 'ver como' se quem está logado for
+    admin de verdade — a simulação jamais amplia acesso, apenas restringe."""
+    s = read_session()
+    if not s:
+        return None
+    alvo = s.get("v")
+    if alvo and is_admin(s.get("e")):
+        return alvo
+    return s.get("e")
+
+
+def simulando():
+    return bool(current_user()) and effective_user() != current_user()
+
+
+def deny_simulacao():
+    """Escrita é bloqueada durante a simulação: você não grava no lugar de outro."""
+    if simulando():
+        return _err(409, "Você está no modo 'ver como'. Saia da simulação para gravar.")
+    return None
+
+
+def require_admin():
+    if not current_user():
+        return _err(401, "Não autenticado.")
+    if not is_admin(current_user()):
+        return _err(403, "Apenas administradores.")
+    return None
 
 
 def require_auth():
@@ -212,7 +255,7 @@ def require_auth():
 #   admin           → None  = vê TODOS os clientes.
 #   usuário comum   → set de customers liberados (pode ser vazio = não vê nada).
 def allowed_customers():
-    email = current_user()
+    email = effective_user()      # respeita o "ver como"
     if not email:
         return set()
     row = q("select coalesce(is_admin,false) as adm from cockpit.usuarios_login "
@@ -472,6 +515,13 @@ def page_reuniao():
     return serve_file("gaps-reuniao.html")
 
 
+@app.get("/gaps-import.html")
+def page_import():
+    if not current_user():
+        return redirect("/login", code=302)
+    return serve_file("gaps-import.html")
+
+
 # ─────────────────────────────────────────────────────────────────────────────
 # Auth API
 # ─────────────────────────────────────────────────────────────────────────────
@@ -511,7 +561,44 @@ def api_me():
     s = read_session()
     if not s:
         return _err(401, "Não autenticado.")
-    return _json({"ok": True, "email": s["e"], "nome": s.get("n")})
+    real = s["e"]
+    adm = is_admin(real)
+    alvo = s.get("v") if (s.get("v") and adm) else None
+    return _json({"ok": True, "email": real, "nome": s.get("n"), "is_admin": adm,
+                  "view_as": alvo, "efetivo": alvo or real})
+
+
+@app.get("/api/usuarios")
+def api_usuarios():
+    """Usuários para o seletor 'ver como' — só admin."""
+    if (r := require_admin()):
+        return r
+    rows = q("""select u.email, u.nome, coalesce(u.is_admin,false) as is_admin, u.ativo,
+                       (select count(*) from cockpit.usuario_clientes uc
+                         where lower(uc.email)=lower(u.email)) as n_clientes
+                from cockpit.usuarios_login u order by u.nome""")
+    return _json({"ok": True, "usuarios": rows})
+
+
+@app.post("/api/view-as")
+def api_view_as():
+    """Liga/desliga a simulação de visão. Só admin. Body: {email} ou {email:null}."""
+    if (r := require_admin()):
+        return r
+    body = request.get_json(silent=True) or {}
+    alvo = (body.get("email") or "").strip().lower() or None
+    if alvo:
+        u = q("select email from cockpit.usuarios_login where lower(email)=%s",
+              (alvo,), one=True)
+        if not u:
+            return _err(404, "Usuário não encontrado.")
+        alvo = u["email"]
+    s = read_session()
+    resp = make_response(_json({"ok": True, "view_as": alvo}))
+    resp.set_cookie(COOKIE_NAME, make_session(s["e"], s.get("n"), view_as=alvo),
+                    max_age=SESSION_TTL, httponly=True, secure=True,
+                    samesite="Lax", path="/")
+    return resp
 
 
 @app.errorhandler(Exception)
@@ -732,6 +819,8 @@ def _resolve_uuid(key, customer):
 def api_decisoes_post():
     if (r := require_auth()):
         return r
+    if (sim := deny_simulacao()):
+        return sim
     chave = request.args.get("cliente", "digitro")
     customer, nome = _resolve_customer(chave)
     if not customer:
@@ -766,6 +855,143 @@ def api_decisoes_post():
         """, (uuid, dec_db, est, nota, classe, user))
         total += 1
     return _json({"ok": True, "cliente": _slug_first(nome), "total": total})
+
+
+# ─────────────────────────────────────────────────────────────────────────────
+# Importação de decisões (JSON) + auto-tag + comparação de estimativa
+# ─────────────────────────────────────────────────────────────────────────────
+def _decisao_tags_map():
+    row = q("select value from cockpit.integration_config where key='decisao_tags'", one=True)
+    mp = row["value"] if row else {}
+    if isinstance(mp, str):
+        mp = json.loads(mp)
+    return mp or {}
+
+
+@app.get("/api/decisao-config")
+def api_decisao_config():
+    if (r := require_auth()):
+        return r
+    return _json({"ok": True, "map": _decisao_tags_map()})
+
+
+def _num(v):
+    try:
+        return float(v)
+    except (TypeError, ValueError):
+        return None
+
+
+@app.post("/api/decisoes/importar")
+def api_decisoes_importar():
+    """Recebe o JSON exportado (schema olim-gaps-decisions), casa cada código com
+    a Task (padding p/ 8 dígitos), grava em cockpit.decisoes e devolve a
+    conciliação com a comparação de horas (Task × JSON). NÃO aplica tags nem
+    altera estimativa — isso é feito depois, sob confirmação, item a item."""
+    if (r := require_auth()):
+        return r
+    if (sim := deny_simulacao()):
+        return sim
+    chave = request.args.get("cliente", "")
+    customer, nome = _resolve_customer(chave)
+    if not customer:
+        return _err(404, f"Cliente '{chave}' não encontrado.")
+    if (d := deny_customer(customer)):
+        return d
+    body = request.get_json(silent=True) or {}
+    decisions = body.get("decisions") or {}
+    if not isinstance(decisions, dict) or not decisions:
+        return _err(400, "JSON sem o campo 'decisions'.")
+    rows = q("select uuid_ticket, raw->>'id' as tid, time_estimate, titulo "
+             "from cockpit.tickets where customer=%s", (customer,))
+    byid = {(r["tid"] or ""): r for r in rows}
+    user = current_user()
+    itens, nao_enc = [], []
+    for code, info in decisions.items():
+        info = info or {}
+        tid = str(code).zfill(8)
+        row = byid.get(tid) or byid.get(str(code))
+        if not row:
+            nao_enc.append({"code": code, "title": info.get("title"),
+                            "decisao": info.get("decision")})
+            continue
+        uuid = row["uuid_ticket"]
+        dec_ui = info.get("decision")
+        dec_db = _DEC_UI2DB.get(dec_ui, "pendente")
+        json_h = _num(info.get("estimativa_horas"))
+        nota = info.get("note")
+        classe = info.get("classification")
+        execute("""
+            insert into cockpit.decisoes
+              (uuid_ticket, decisao, estimativa, observacao, classe, decided_by, decided_at, updated_at)
+            values (%s,%s,%s,%s,%s,%s,now(),now())
+            on conflict (uuid_ticket) do update set
+              decisao=excluded.decisao, estimativa=excluded.estimativa,
+              observacao=excluded.observacao, classe=excluded.classe,
+              decided_by=excluded.decided_by, updated_at=now()
+        """, (uuid, dec_db, json_h, nota, classe, user))
+        task_h = _num(row["time_estimate"])
+        diff = None if (json_h is None or task_h is None) else round(json_h - task_h, 2)
+        itens.append({"code": code, "id": tid, "uuid": uuid,
+                      "title": row["titulo"] or info.get("title"),
+                      "decisao": dec_ui, "json_horas": json_h, "task_horas": task_h,
+                      "diff": diff, "modulo": info.get("modulo"),
+                      "classe": classe})
+    itens.sort(key=lambda x: (x["diff"] is None, -abs(x["diff"] or 0)))
+    return _json({"ok": True, "cliente": _slug_first(nome), "customer": customer,
+                  "total": len(itens), "nao_encontrados": nao_enc, "itens": itens})
+
+
+@app.post("/api/ticket/<uuid>/decidir")
+def api_ticket_decidir(uuid):
+    """Grava a decisão em cockpit.decisoes E aplica a tag da decisão no Tasks SC
+    (auto-tag). Usado tanto na decisão AO VIVO quanto no 'aplicar' da importação.
+    Body: {decisao, estimativa?, nota?, classe?, aplicar_tag?(default true)}."""
+    if (r := require_auth()):
+        return r
+    if (sim := deny_simulacao()):
+        return sim
+    if (g := deny_uuid(uuid)):
+        return g
+    body = request.get_json(silent=True) or {}
+    dec_ui = body.get("decisao")
+    dec_db = _DEC_UI2DB.get(dec_ui, "pendente")
+    est = _num(body.get("estimativa"))
+    # grava a decisão (fonte da verdade no Supabase)
+    execute("""
+        insert into cockpit.decisoes
+          (uuid_ticket, decisao, estimativa, observacao, classe, decided_by, decided_at, updated_at)
+        values (%s,%s,%s,%s,%s,%s,now(),now())
+        on conflict (uuid_ticket) do update set
+          decisao=excluded.decisao,
+          estimativa=coalesce(excluded.estimativa, cockpit.decisoes.estimativa),
+          observacao=coalesce(excluded.observacao, cockpit.decisoes.observacao),
+          classe=coalesce(excluded.classe, cockpit.decisoes.classe),
+          decided_by=excluded.decided_by, updated_at=now()
+    """, (uuid.upper(), dec_db, est, body.get("nota"), body.get("classe"), current_user()))
+    # auto-tag no Tasks SC
+    tag_aplicada = None
+    if body.get("aplicar_tag", True) and dec_ui:
+        mp = _decisao_tags_map()
+        tag = mp.get(dec_ui)
+        if tag:
+            try:
+                tdata, tcode, _ = tasks_request("GET", f"/tickets/tags/{uuid}")
+                atuais = [str(t.get("tag")).strip() for t in (tdata.get("items") or [])] if tcode == 200 else []
+                novas = list(atuais)
+                if mp.get("swap"):
+                    outras = {str(v).upper() for k, v in mp.items() if k != "swap"}
+                    novas = [a for a in novas if a.upper() not in outras]
+                if tag.upper() not in [n.upper() for n in novas]:
+                    novas.append(tag)
+                if [n.upper() for n in novas] != [a.upper() for a in atuais]:
+                    tasks_update(uuid, {"tags": novas})
+                    _resync_tags(uuid)
+                tag_aplicada = tag
+            except Exception as e:
+                return _json({"ok": True, "uuid": uuid, "tag": None,
+                              "aviso": f"Decisão gravada, mas falhou aplicar a tag: {e}"})
+    return _json({"ok": True, "uuid": uuid, "decisao": dec_ui, "tag": tag_aplicada})
 
 
 # ─────────────────────────────────────────────────────────────────────────────
@@ -925,6 +1151,8 @@ def _resync_tags(uuid):
 def api_ticket_update(uuid):
     if (r := require_auth()):
         return r
+    if (sim := deny_simulacao()):
+        return sim
     if (g := deny_uuid(uuid)):
         return g
     changes = request.get_json(silent=True)
@@ -944,6 +1172,8 @@ def api_ticket_update(uuid):
 def api_ticket_history_post(uuid):
     if (r := require_auth()):
         return r
+    if (sim := deny_simulacao()):
+        return sim
     if (g := deny_uuid(uuid)):
         return g
     body = request.get_json(silent=True) or {}
@@ -1003,6 +1233,8 @@ def api_ticket_history_post(uuid):
 def api_refresh():
     if (r := require_auth()):
         return r
+    if (sim := deny_simulacao()):
+        return sim
     chave = request.args.get("cliente", "DIGITRO")
     customer, nome = _resolve_customer(chave)
     if not customer:
@@ -1078,6 +1310,8 @@ def api_gmail_health():
 def api_gmail_draft():
     if (r := require_auth()):
         return r
+    if (sim := deny_simulacao()):
+        return sim
     body = request.get_json(silent=True) or {}
     _u = body.get("uuid_ticket") or body.get("uuid")
     if _u and (g := deny_uuid(_u)):
@@ -1110,7 +1344,7 @@ def static_assets(asset):
     safe = (PUBLIC_DIR / asset).resolve()
     if PUBLIC_DIR in safe.parents and safe.exists() and safe.is_file():
         # páginas sensíveis exigem login
-        if safe.name in ("gaps-decisao.html", "gaps-reuniao.html") and not current_user():
+        if safe.name in ("gaps-decisao.html", "gaps-reuniao.html", "gaps-import.html") and not current_user():
             return redirect("/login", code=302)
         ext = safe.suffix.lower()
         ctype = {".html": "text/html; charset=utf-8", ".js": "application/javascript",

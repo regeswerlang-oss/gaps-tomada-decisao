@@ -1,0 +1,225 @@
+<!doctype html>
+<html lang="pt-BR">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Importar Decisões · Gaps</title>
+<style>
+  :root{--navy:#0C2340;--roxo:#6F5BFF;--grad:linear-gradient(135deg,#6F5BFF,#4DB6E8);
+    --approve:#12A150;--phase2:#E08A00;--workaround:#0E9BB8;--refuse:#D33A4E;
+    --gray:#6B7280;--muted:#9a9ab5;--line:#E3EAF0;--bg:#F4F6FB;--font:Inter,-apple-system,Segoe UI,Roboto,sans-serif}
+  *{box-sizing:border-box}
+  body{margin:0;font-family:var(--font);background:var(--bg);color:var(--navy)}
+  .topbar{background:var(--navy);color:#fff;padding:14px 22px;display:flex;align-items:center;gap:16px;flex-wrap:wrap}
+  .topbar h1{font-size:16px;margin:0;font-weight:800;letter-spacing:.3px}
+  .topbar .sub{font-size:11px;color:#9fb0c9;text-transform:uppercase;letter-spacing:1px}
+  .topbar a{margin-left:auto;color:#cdd7e6;font-size:12.5px;text-decoration:none;border:1px solid rgba(255,255,255,.18);padding:7px 12px;border-radius:8px}
+  .wrap{max-width:1400px;margin:18px auto;padding:0 22px}
+  .card{background:#fff;border:1px solid var(--line);border-radius:14px;padding:18px 20px;margin-bottom:16px;box-shadow:0 1px 3px rgba(12,35,64,.05)}
+  label{font-size:12px;color:var(--gray);font-weight:600;display:block;margin-bottom:6px}
+  select,input[type=file]{font-family:var(--font);font-size:13px;border:1px solid #D8D8E4;border-radius:9px;padding:9px 11px;background:#fff}
+  .row{display:flex;gap:16px;align-items:flex-end;flex-wrap:wrap}
+  .btn{border:0;border-radius:9px;padding:10px 15px;font-weight:700;font-size:13px;cursor:pointer;color:#fff;background:var(--grad)}
+  .btn.ghost{background:#fff;color:var(--navy);border:1px solid #D8D8E4}
+  .btn.dark{background:var(--navy)}
+  .btn:disabled{opacity:.5;cursor:default}
+  .kpis{display:grid;grid-template-columns:repeat(auto-fit,minmax(120px,1fr));gap:10px;margin-top:4px}
+  .kpi{background:#FAFBFF;border:1px solid var(--line);border-radius:10px;padding:11px 13px}
+  .kpi .n{font-size:22px;font-weight:800}
+  .kpi .l{font-size:10px;text-transform:uppercase;letter-spacing:.5px;color:var(--gray);margin-top:2px}
+  table{width:100%;border-collapse:collapse;font-size:12.5px}
+  th,td{text-align:left;padding:9px 10px;border-bottom:1px solid #EEF1F6}
+  th{font-size:10.5px;text-transform:uppercase;letter-spacing:.5px;color:var(--gray);position:sticky;top:0;background:#fff}
+  td.num{text-align:right;font-variant-numeric:tabular-nums;font-weight:700}
+  .tablewrap{max-height:60vh;overflow:auto;border:1px solid var(--line);border-radius:10px}
+  .pill{font-size:10.5px;font-weight:800;border-radius:20px;padding:3px 10px;display:inline-block}
+  .p-approve{background:#E4F6EC;color:var(--approve)} .p-phase2{background:#FDF0DD;color:var(--phase2)}
+  .p-workaround{background:#E1F5F9;color:var(--workaround)} .p-refuse{background:#FBE7EA;color:var(--refuse)}
+  .p-pending{background:#EEF0F4;color:var(--gray)}
+  .diff-pos{color:var(--approve)} .diff-neg{color:var(--refuse)} .diff-zero{color:var(--muted)}
+  .code{font-family:'SF Mono',Monaco,Consolas,monospace;font-size:11px;background:var(--navy);color:#fff;padding:2px 7px;border-radius:5px}
+  .muted{color:var(--muted)}
+  .bar{height:8px;background:#EAEAF3;border-radius:5px;overflow:hidden;margin-top:8px}
+  .bar > i{display:block;height:100%;background:var(--grad);width:0;transition:width .2s}
+  .toast{position:fixed;bottom:18px;left:50%;transform:translateX(-50%);background:var(--navy);color:#fff;
+    padding:11px 18px;border-radius:10px;font-size:13px;opacity:0;pointer-events:none;transition:.2s;z-index:99}
+  .toast.show{opacity:1}
+  .warn{background:#FFF7E6;border:1px solid #F3D9A0;color:#8a6100;border-radius:10px;padding:10px 13px;font-size:12.5px;margin-top:10px}
+  .hint{font-size:12px;color:var(--gray)}
+  .sechead{font-size:12px;font-weight:800;text-transform:uppercase;letter-spacing:.6px;color:var(--roxo);margin:2px 0 10px}
+</style>
+</head>
+<body>
+  <div class="topbar">
+    <div><div class="sub">Reunião de Decisão de GAPs · TOTVS Protheus</div><h1>📥 Importar Decisões (JSON)</h1></div>
+    <a href="/gaps-reuniao.html">🤝 Reunião</a>
+    <a href="/">📋 Board</a>
+  </div>
+
+  <div class="wrap">
+    <div class="card">
+      <div class="sechead">1 · Selecione o cliente e o arquivo</div>
+      <div class="row">
+        <div><label for="sel">Cliente</label><select id="sel"><option>carregando…</option></select></div>
+        <div><label for="file">Arquivo de decisões (.json)</label><input id="file" type="file" accept=".json,application/json"></div>
+        <button class="btn" id="btnImport" disabled>Importar &amp; conciliar</button>
+      </div>
+      <div class="hint" id="fileInfo" style="margin-top:8px"></div>
+      <div id="warnBox"></div>
+    </div>
+
+    <div class="card" id="resumoCard" style="display:none">
+      <div class="sechead">2 · Conciliação</div>
+      <div class="kpis" id="kpis"></div>
+      <div class="row" style="margin-top:14px">
+        <button class="btn dark" id="btnTags" disabled>🏷️ Aplicar tags no Tasks SC</button>
+        <button class="btn ghost" id="btnEst" disabled>⏱️ Atualizar estimativas divergentes</button>
+        <span class="hint" id="progressLbl"></span>
+      </div>
+      <div class="bar" id="progressBar" style="display:none"><i></i></div>
+    </div>
+
+    <div class="card" id="tabelaCard" style="display:none">
+      <div class="sechead">GAPs conciliados <span class="muted" id="qtd"></span></div>
+      <div class="tablewrap">
+        <table id="tbl"><thead><tr>
+          <th>Task</th><th>Título</th><th>Módulo</th><th>Decisão</th>
+          <th style="text-align:right">JSON (h)</th><th style="text-align:right">Task (h)</th>
+          <th style="text-align:right">Δ</th><th>Tag</th>
+        </tr></thead><tbody></tbody></table>
+      </div>
+      <div id="naoEnc"></div>
+    </div>
+  </div>
+  <div class="toast" id="toast"></div>
+
+<script>
+const $=s=>document.querySelector(s), $$=s=>[...document.querySelectorAll(s)];
+const esc=s=>(s||"").replace(/[&<>"]/g,c=>({"&":"&amp;","<":"&lt;",">":"&gt;",'"':"&quot;"}[c]));
+const DEC={approve:["Aprovado","p-approve"],phase2:["2ª Fase","p-phase2"],workaround:["Contorno","p-workaround"],refuse:["Recusado","p-refuse"],pending:["Pendente","p-pending"]};
+let CLIENTE="", JSONDATA=null, REPORT=null, TAGMAP={};
+
+function toast(m){const t=$("#toast");t.textContent=m;t.className="toast show";clearTimeout(t._t);t._t=setTimeout(()=>t.className="toast",2600);}
+async function api(path,opts){const r=await fetch(path,opts);const t=await r.text();let j={};try{j=JSON.parse(t)}catch(_){}
+  if(!r.ok||j.ok===false)throw new Error(j.error||("HTTP "+r.status));return j;}
+
+// carrega clientes + mapa de tags
+(async()=>{
+  try{
+    const [cls,cfg]=await Promise.all([api("/api/clientes"),api("/api/decisao-config").catch(()=>({map:{}}))]);
+    TAGMAP=cfg.map||{};
+    const sel=$("#sel");
+    sel.innerHTML=(cls.clientes||[]).map(c=>`<option value="${esc(c.chave)}">${esc(c.nome)}</option>`).join("");
+    CLIENTE=sel.value; sel.onchange=()=>CLIENTE=sel.value;
+  }catch(e){ $("#sel").innerHTML=`<option>erro: ${esc(e.message)}</option>`; }
+})();
+
+$("#file").addEventListener("change",e=>{
+  const f=e.target.files[0]; $("#warnBox").innerHTML=""; JSONDATA=null; $("#btnImport").disabled=true;
+  if(!f) return;
+  const rd=new FileReader();
+  rd.onload=()=>{
+    try{
+      const d=JSON.parse(rd.result);
+      if(!d.decisions||typeof d.decisions!=="object") throw new Error("JSON sem o campo 'decisions'.");
+      JSONDATA=d;
+      const n=Object.keys(d.decisions).length;
+      $("#fileInfo").innerHTML=`<b>${esc(f.name)}</b> · ${n} GAPs · exportado ${esc(d.exported_at_local||d.exported_at||"?")}`;
+      $("#btnImport").disabled=false;
+    }catch(err){ $("#warnBox").innerHTML=`<div class="warn">Arquivo inválido: ${esc(err.message)}</div>`; }
+  };
+  rd.readAsText(f);
+});
+
+$("#btnImport").onclick=async()=>{
+  if(!JSONDATA||!CLIENTE) return;
+  const b=$("#btnImport"); b.disabled=true; b.textContent="Conciliando…";
+  try{
+    REPORT=await api("/api/decisoes/importar?cliente="+encodeURIComponent(CLIENTE),
+      {method:"POST",headers:{"Content-Type":"application/json"},body:JSON.stringify(JSONDATA)});
+    renderReport();
+    toast(`Importados ${REPORT.total} GAPs · gravados no Supabase ✓`);
+  }catch(e){ $("#warnBox").innerHTML=`<div class="warn">Falha ao importar: ${esc(e.message)}</div>`; }
+  b.disabled=false; b.textContent="Importar & conciliar";
+};
+
+function renderReport(){
+  const it=REPORT.itens||[];
+  const byDec=k=>it.filter(x=>x.decisao===k).length;
+  const divs=it.filter(x=>x.diff!==null && x.diff!==0).length;
+  $("#kpis").innerHTML=`
+    <div class="kpi"><div class="n">${it.length}</div><div class="l">GAPs conciliados</div></div>
+    <div class="kpi"><div class="n" style="color:var(--approve)">${byDec("approve")}</div><div class="l">Aprovados</div></div>
+    <div class="kpi"><div class="n" style="color:var(--phase2)">${byDec("phase2")}</div><div class="l">2ª Fase</div></div>
+    <div class="kpi"><div class="n" style="color:var(--workaround)">${byDec("workaround")}</div><div class="l">Contorno</div></div>
+    <div class="kpi"><div class="n" style="color:var(--refuse)">${byDec("refuse")}</div><div class="l">Recusados</div></div>
+    <div class="kpi"><div class="n" style="color:${divs?'var(--refuse)':'var(--approve)'}">${divs}</div><div class="l">Estimativas divergentes</div></div>
+    <div class="kpi"><div class="n" style="color:var(--muted)">${(REPORT.nao_encontrados||[]).length}</div><div class="l">Não encontrados</div></div>`;
+  const tb=$("#tbl").querySelector("tbody");
+  tb.innerHTML=it.map(x=>{
+    const dm=DEC[x.decisao]||DEC.pending;
+    const dcls=x.diff===null?"diff-zero":(x.diff>0?"diff-pos":(x.diff<0?"diff-neg":"diff-zero"));
+    const dtxt=x.diff===null?"—":(x.diff>0?"+"+x.diff:x.diff);
+    const tag=TAGMAP[x.decisao]||"";
+    return `<tr data-uuid="${x.uuid}">
+      <td><span class="code">#${esc(x.id)}</span></td>
+      <td>${esc(x.title||"")}</td>
+      <td class="muted">${esc(x.modulo||"—")}</td>
+      <td><span class="pill ${dm[1]}">${dm[0]}</span></td>
+      <td class="num">${x.json_horas??"—"}</td>
+      <td class="num">${x.task_horas??"—"}</td>
+      <td class="num ${dcls}">${dtxt}</td>
+      <td class="muted" data-tagcell>${esc(tag||"—")}</td>
+    </tr>`;
+  }).join("");
+  $("#qtd").textContent=`(${it.length})`;
+  const ne=REPORT.nao_encontrados||[];
+  $("#naoEnc").innerHTML=ne.length?`<div class="warn" style="margin-top:12px"><b>${ne.length} código(s) não casaram com Task:</b> ${ne.map(x=>esc(x.code)).join(", ")}</div>`:"";
+  $("#resumoCard").style.display=""; $("#tabelaCard").style.display="";
+  $("#btnTags").disabled=false; $("#btnEst").disabled=!divs;
+}
+
+// aplica ação item a item (sequencial), com barra de progresso
+async function runBatch(items, worker, label){
+  const bar=$("#progressBar"), fill=bar.querySelector("i"), lbl=$("#progressLbl");
+  bar.style.display=""; let ok=0, fail=0;
+  for(let i=0;i<items.length;i++){
+    try{ await worker(items[i]); ok++; }catch(e){ fail++; }
+    fill.style.width=Math.round((i+1)/items.length*100)+"%";
+    lbl.textContent=`${label}: ${i+1}/${items.length} (${ok} ok${fail?`, ${fail} falha`:""})`;
+  }
+  setTimeout(()=>{bar.style.display="none";},1200);
+  toast(`${label} concluído: ${ok} ok${fail?`, ${fail} falha`:""}`);
+}
+
+$("#btnTags").onclick=async()=>{
+  const it=(REPORT.itens||[]).filter(x=>x.decisao && x.decisao!=="pending");
+  if(!it.length) return toast("Nenhuma decisão para aplicar.");
+  if(!confirm(`Aplicar a tag da decisão em ${it.length} Tasks no Tasks SC?`)) return;
+  $("#btnTags").disabled=true;
+  await runBatch(it, async x=>{
+    const j=await api(`/api/ticket/${x.uuid}/decidir`,{method:"POST",headers:{"Content-Type":"application/json"},
+      body:JSON.stringify({decisao:x.decisao})});
+    const row=$(`tr[data-uuid="${x.uuid}"] [data-tagcell]`);
+    if(row){ row.innerHTML=`<span class="pill p-approve">✓ ${esc(j.tag||TAGMAP[x.decisao]||"")}</span>`; }
+  }, "Aplicar tags");
+  $("#btnTags").disabled=false;
+};
+
+$("#btnEst").onclick=async()=>{
+  const it=(REPORT.itens||[]).filter(x=>x.diff!==null && x.diff!==0 && x.json_horas!=null);
+  if(!it.length) return toast("Sem estimativas divergentes.");
+  if(!confirm(`Atualizar a estimativa (time_estimate) de ${it.length} Tasks para as horas do JSON?`)) return;
+  $("#btnEst").disabled=true;
+  await runBatch(it, async x=>{
+    await api(`/api/ticket/${x.uuid}/update`,{method:"POST",headers:{"Content-Type":"application/json"},
+      body:JSON.stringify({time_estimate:x.json_horas})});
+    const tr=$(`tr[data-uuid="${x.uuid}"]`);
+    if(tr){ tr.querySelectorAll("td.num")[1].textContent=x.json_horas; const dc=tr.querySelectorAll("td.num")[2];
+      dc.textContent="0"; dc.className="num diff-zero"; }
+  }, "Atualizar estimativas");
+  $("#btnEst").disabled=true;
+};
+</script>
+</body>
+</html>

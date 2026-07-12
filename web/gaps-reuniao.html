@@ -157,6 +157,15 @@ button{font-family:inherit;cursor:pointer}
 .toast.workaround{background:var(--workaround)} .toast.refuse{background:var(--refuse)}
 @media print{.topbar{position:relative}.controls,.fab-bar,.btn-decide,.btn-detalhes,.search-wrap{display:none!important}.classif-body,.group-body,.task-extra{display:block!important}.task{page-break-inside:avoid}}
 @media(max-width:768px){.classif-head{grid-template-columns:auto 1fr auto;gap:10px;padding:13px}.classif-head .classif-stat:nth-of-type(2),.classif-progress-wrap{display:none}.task-top{grid-template-columns:1fr}}
+
+/* ── "Ver como" (admin simula a visão de outro usuário) ── */
+#viewAs{background:#fff;border:1px solid #D8D8E4;border-radius:8px;padding:6px 8px;font-size:12px;font-weight:600}
+#viewAs.hide{display:none}
+#simFaixa{display:none;align-items:center;gap:10px;background:#FFC53D;color:#4A3200;
+  padding:8px 20px;font-size:13px;font-weight:700}
+#simFaixa.on{display:flex}
+#simFaixa button{margin-left:auto;background:#4A3200;color:#FFF3DD;border:0;border-radius:7px;
+  padding:5px 11px;font-size:11.5px;font-weight:700;cursor:pointer}
 </style>
 
 <script src="supabase-data.js"></script>
@@ -200,6 +209,7 @@ button{font-family:inherit;cursor:pointer}
   </div>
   <button class="btn-ghost" id="btnExpand">Expandir tudo</button>
   <button class="btn-ghost" id="btnCollapse">Recolher tudo</button>
+  <a class="btn-ghost" href="/gaps-import.html" style="text-decoration:none">📥 Importar JSON</a>
   <a class="btn-ghost" href="/" style="text-decoration:none">← Board operacional</a>
 </div>
 
@@ -450,12 +460,54 @@ async function loadDesc(code){
   }
   catch(e){ el.className="dv muted"; el.textContent="Erro ao carregar descrição."; }
 }
+
+/* ════════════════ "Ver como" — admin simula a visão de outro usuário ════════
+   A simulação só RESTRINGE o escopo (o backend reconfere se quem está logado é
+   admin de verdade). Durante a simulação, toda ESCRITA é bloqueada (HTTP 409). */
+async function initViewAs(){
+  let me; try{ me = await api("/api/me"); }catch(_){ return; }
+  const sel = document.getElementById("viewAs");
+  const faixa = document.getElementById("simFaixa");
+  if(me.view_as){
+    faixa.classList.add("on");
+    document.getElementById("simTxt").textContent =
+      `Vendo como ${me.view_as} — esta é a visão DELE. Gravações estão bloqueadas.`;
+  }
+  return;   // na reunião só mostramos a faixa; o seletor vive no board
+  try{
+    const {usuarios} = await api("/api/usuarios");
+    sel.classList.remove("hide");
+    sel.innerHTML = `<option value="">👁 Ver como…</option>` + usuarios.map(u=>
+      `<option value="${esc(u.email)}" ${u.email===me.view_as?"selected":""}>${esc(u.nome||u.email)}${u.is_admin?" (admin)":` · ${u.n_clientes} cli.`}</option>`).join("");
+    sel.onchange = async ()=>{
+      await api("/api/view-as",{method:"POST",headers:{"Content-Type":"application/json"},
+        body:JSON.stringify({email:sel.value||null})});
+      location.reload();
+    };
+  }catch(_){}
+}
+async function sairSimulacao(){
+  await api("/api/view-as",{method:"POST",headers:{"Content-Type":"application/json"},
+    body:JSON.stringify({email:null})});
+  location.reload();
+}
+initViewAs();
+
 function decide(code, act){
   decisions[code]=decisions[code]||{};
   decisions[code].decision = decisions[code].decision===act ? null : act;
   decisions[code].ts = new Date().toISOString();
   markDirty(); applyTask(code); updateKPIs(); applyFilter(); updateProgress();
-  if(decisions[code].decision) toast(`#${code} · ${DEC_LABEL[act]}`, act);
+  const dec = decisions[code].decision;
+  if(dec) toast(`#${code} · ${DEC_LABEL[act]}`, act);
+  // grava LIVE no Supabase + aplica a tag da decisão no Tasks SC (auto-tag)
+  const t = TASKS.find(x=>x.id===code);
+  if(t && t.uuid){
+    api(`/api/ticket/${t.uuid}/decidir`,{method:"POST",headers:{"Content-Type":"application/json"},
+      body:JSON.stringify({decisao:dec, estimativa:decisions[code].estimativa})})
+      .then(j=>{ if(dec && j.tag) toast(`#${code} · tag ${j.tag} ✓`, act); })
+      .catch(e=>toast(`#${code} · falha ao gravar/tag: ${e.message}`));
+  }
 }
 function applyTask(code){
   const task=$(`.task[data-code="${code}"]`); if(!task) return;
