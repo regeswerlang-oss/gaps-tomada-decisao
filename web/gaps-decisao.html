@@ -282,7 +282,7 @@ const COLS = [
   {key:"levantar", titulo:"📋 Levantar Requisitos", desc:"requisitos pendentes"},
   {key:"orcamento", titulo:"💰 Orçamento Pendente", desc:"aguardando orçamento"},
   {key:"analise",  titulo:"🔍 Em Análise", desc:"sem estimativa definida"},
-  {key:"aguardcli",titulo:"⏳ Aguardando Cliente", desc:"aguardando retorno do cliente"},
+  {key:"aguardcli",titulo:"⏳ Pendente com Cliente", desc:"aguardando retorno do cliente"},
   {key:"estimado", titulo:"✅ Estimado / Decidido", desc:"com estimativa"},
 ];
 
@@ -342,7 +342,7 @@ const isFoco = t => tagsOf(t).some(tg=>ETAPAS.includes(tg));
 const classeOf = t => CLASSES.find(c=>tagsOf(t).includes(c)) || "";
 function colOf(t){
   const tg = tagsOf(t);
-  if(tg.includes("AGUARDANDO CLIENTE")) return "aguardcli";
+  if(tg.includes("PENDENTE COM CLIENTE")) return "aguardcli";
   if(tg.includes("LEVANTAR REQUISITOS")||tg.includes("LEVANTAMENTO")) return "levantar";
   if(tg.includes("ORCAMENTO PENDENTE")) return "orcamento";
   if(Number(t.time_estimate)>0) return "estimado";
@@ -429,7 +429,7 @@ function render(){
     </div>`).join("");
 }
 
-const CARD_STRUCT_TAGS = new Set([...ETAPAS, "AGUARDANDO CLIENTE", ...CLASSES]);
+const CARD_STRUCT_TAGS = new Set([...ETAPAS, "PENDENTE COM CLIENTE", ...CLASSES]);
 function cardHtml(t){
   const cls = classeOf(t);
   const est = Number(t.time_estimate)||0;
@@ -495,11 +495,11 @@ async function prefetchDescricoes(){
 
 /* ════════════════ Drag & drop (gestão ágil de tags) ════════════════ */
 const DROP_RULES = {
-  levantar:{add:["LEVANTAR REQUISITOS"],remove:["ORCAMENTO PENDENTE","AGUARDANDO CLIENTE"]},
-  orcamento:{add:["ORCAMENTO PENDENTE"],remove:["LEVANTAR REQUISITOS","LEVANTAMENTO","AGUARDANDO CLIENTE"]},
-  analise:{add:[],remove:["LEVANTAR REQUISITOS","LEVANTAMENTO","ORCAMENTO PENDENTE","AGUARDANDO CLIENTE"]},
-  aguardcli:{add:["AGUARDANDO CLIENTE"],remove:[]},
-  estimado:{add:[],remove:["ORCAMENTO PENDENTE","AGUARDANDO CLIENTE"]},
+  levantar:{add:["LEVANTAR REQUISITOS"],remove:["ORCAMENTO PENDENTE","PENDENTE COM CLIENTE"]},
+  orcamento:{add:["ORCAMENTO PENDENTE"],remove:["LEVANTAR REQUISITOS","LEVANTAMENTO","PENDENTE COM CLIENTE"]},
+  analise:{add:[],remove:["LEVANTAR REQUISITOS","LEVANTAMENTO","ORCAMENTO PENDENTE","PENDENTE COM CLIENTE"]},
+  aguardcli:{add:["PENDENTE COM CLIENTE"],remove:[]},
+  estimado:{add:[],remove:["ORCAMENTO PENDENTE","PENDENTE COM CLIENTE"]},
 };
 async function onDrop(ev, col){
   ev.preventDefault();

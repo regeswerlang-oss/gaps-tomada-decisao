@@ -408,14 +408,19 @@ def _resolve_tag_ids(values, current_tag_items):
             name2id.setdefault(nm, tid)
     except Exception:
         pass
-    out, seen = [], set()
+    out, seen, desconhecidas = [], set(), []
     for x in values:
         s = str(x).strip()
+        if not s:
+            continue
         tid = s if re.fullmatch(r"\d{3,}", s) else name2id.get(s.upper())
-        if tid and tid not in seen:
+        if not tid:
+            desconhecidas.append(s)      # não existe no catálogo do Tasks SC
+            continue
+        if tid not in seen:
             seen.add(tid)
             out.append(tid)
-    return out
+    return out, desconhecidas
 
 
 def tasks_update(uuid, changes):
@@ -437,7 +442,16 @@ def tasks_update(uuid, changes):
     # o Tasks SC devolve HTTP 400 ("PUT /tickets falhou").
     if "tags" in changes:
         changes = dict(changes)
-        changes["tags"] = _resolve_tag_ids(changes["tags"], tag_data_items)
+        ids, desconhecidas = _resolve_tag_ids(changes["tags"], tag_data_items)
+        if desconhecidas:
+            # Não dá para CRIAR tag pela API: o PUT só aceita IDs de tags que já
+            # existem no catálogo. Antes isso era descartado em silêncio — o
+            # usuário achava que tinha adicionado a tag e nada acontecia.
+            raise ValueError(
+                "Tag(s) inexistente(s) no catálogo do Tasks SC: "
+                + ", ".join(desconhecidas)
+                + ". Crie a tag no Tasks SC primeiro (aqui só dá para usar tags já cadastradas).")
+        changes["tags"] = ids
     payload = {
         "uuid": current["uuid"], "id": current["id"],
         "title": current.get("title", "") or "",
