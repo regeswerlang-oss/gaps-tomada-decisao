@@ -372,15 +372,14 @@ def tasks_request(method, path, params=None, body=None, _retry=True):
 _TAG_CATALOG_CACHE = {"map": None, "exp": 0}
 
 
-def _catalog_pages(max_pages=120, search=None):
-    """Itera o catálogo de tags do Tasks SC.
+def _catalog_pages(page=1, max_pages=200, search=None):
+    """Itera o catálogo de tags do Tasks SC a partir de `page`.
 
-    CUIDADO: este endpoint devolve UMA LINHA POR ASSOCIAÇÃO (a mesma tag repete
-    para cada ticket que a usa), ordenado por nome. Por isso não dá para parar
-    nas primeiras páginas: um catálogo truncado esconde as tags do fim do
-    alfabeto (foi o que aconteceu com PENDENTE COM CLIENTE).
+    CUIDADO (aprendido na dor): este endpoint devolve UMA LINHA POR ASSOCIAÇÃO —
+    a mesma tag repete para cada ticket que a usa — ordenado por nome. Varrer
+    tudo em tempo de request é inviável (estoura o timeout). Por isso o catálogo
+    é sincronizado para `cockpit.tags_catalogo` e lido de lá.
     """
-    page = 1
     while page <= max_pages:
         params = {"page": page, "pageSize": 200, "order": "tag", "fields": "id,tag"}
         if search:
@@ -389,52 +388,48 @@ def _catalog_pages(max_pages=120, search=None):
         if code != 200 or not isinstance(data, dict):
             return
         for it in (data.get("items") or []):
-            if it.get("tag"):
-                yield str(it["tag"]).strip(), it["id"]
+            if it.get("tag") and it.get("id"):
+                yield page, str(it["tag"]).strip(), it["id"]
         if not data.get("hasNext"):
             return
         page += 1
 
 
 def _tags_catalog_map(force=False):
-    """{NOME_UPPER: id} do catálogo completo (cacheado 10 min)."""
+    """{NOME_UPPER: id} lido do SUPABASE (instantâneo)."""
     now = time.time()
     if not force and _TAG_CATALOG_CACHE["map"] is not None and _TAG_CATALOG_CACHE["exp"] > now:
         return _TAG_CATALOG_CACHE["map"]
-    m = {}
-    for nome, tid in _catalog_pages():
-        m.setdefault(nome.upper(), tid)
-    if m:
-        _TAG_CATALOG_CACHE["map"] = m
-        _TAG_CATALOG_CACHE["exp"] = now + 600
+    rows = q("select id, tag from cockpit.tags_catalogo")
+    m = {str(r["tag"]).strip().upper(): r["id"] for r in (rows or [])}
+    _TAG_CATALOG_CACHE["map"] = m
+    _TAG_CATALOG_CACHE["exp"] = now + 300
     return m
 
 
 def _find_tag_id(nome):
-    """Acha o id de UMA tag pelo nome, mesmo que o catálogo em cache esteja
-    incompleto: 1) cache; 2) busca direcionada na API; 3) varredura com saída
-    antecipada. Devolve None só se a tag realmente não existir."""
+    """id de UMA tag pelo nome: 1) catálogo no Supabase; 2) busca direcionada na
+    API (tag nova, ainda não sincronizada) — e nesse caso já grava no catálogo."""
     alvo = str(nome).strip().upper()
     mp = _tags_catalog_map()
     if alvo in mp:
         return mp[alvo]
-    # 2) busca direcionada (bem mais barata que varrer tudo)
-    for n, tid in _catalog_pages(max_pages=10, search=str(nome).strip()):
+    for _pg, n, tid in _catalog_pages(max_pages=8, search=str(nome).strip()):
         if n.upper() == alvo:
-            mp[alvo] = tid
-            return tid
-    # 3) varredura completa com saída assim que encontrar
-    for n, tid in _catalog_pages():
-        if n.upper() == alvo:
+            try:
+                execute("""insert into cockpit.tags_catalogo (id, tag) values (%s,%s)
+                           on conflict (id) do update set tag=excluded.tag, synced_at=now()""",
+                        (tid, n))
+            except Exception:
+                pass
             mp[alvo] = tid
             return tid
     return None
 
 
 def _resolve_tag_ids(values, current_tag_items):
-    """A tela manda NOMES de tag; o PUT exige IDs. Traduz usando as tags atuais do
-    ticket (garante que nenhuma existente se perca) + o catálogo. Devolve também
-    as que realmente não existem, para o app avisar em vez de descartar calado."""
+    """A tela manda NOMES; o PUT exige IDs. Usa as tags atuais do ticket (nada se
+    perde) + o catálogo. Devolve as desconhecidas para avisar, nunca descartar."""
     name2id = {}
     for t in (current_tag_items or []):
         if t.get("tag"):
@@ -1119,18 +1114,50 @@ def api_ticket_history(uuid):
 
 @app.get("/api/tags-catalog")
 def api_tags_catalog():
-    """Catálogo para o autocomplete. Usa o mapa completo (deduplicado) — o
-    endpoint da API repete a tag por associação, então nunca pagine 'só um
-    pouco': o alfabeto fica cortado."""
+    """Autocomplete: lê o catálogo do SUPABASE (instantâneo). Se estiver vazio,
+    avisa para rodar o sync (POST /api/tags/sync)."""
     if (r := require_auth()):
         return r
     search = request.args.get("search", "").strip().upper()
-    mp = _tags_catalog_map()
-    items = [{"id": tid, "tag": nome} for nome, tid in
-             sorted(((n, i) for n, i in mp.items()), key=lambda x: x[0])]
+    rows = q("select id, tag from cockpit.tags_catalogo order by upper(tag)")
+    items = [{"id": r["id"], "tag": r["tag"]} for r in (rows or [])]
     if search:
-        items = [i for i in items if search in i["tag"]]
-    return _json({"ok": True, "items": items})
+        items = [i for i in items if search in i["tag"].upper()]
+    return _json({"ok": True, "items": items, "total": len(items),
+                  "vazio": not items})
+
+
+@app.post("/api/tags/sync")
+def api_tags_sync():
+    """Sincroniza o catálogo de tags da API para cockpit.tags_catalogo.
+
+    Processa páginas a partir de ?page=N dentro de um orçamento de tempo (~40s)
+    e devolve {next_page, done}. O chamador repete até done=true. As tags mudam
+    raramente, então isso roda de vez em quando (ou por cron)."""
+    if (r := require_auth()):
+        return r
+    if (sim := deny_simulacao()):
+        return sim
+    page = int(request.args.get("page", 1))
+    ini = time.time()
+    vistos, ultima, done = {}, page, True
+    for pg, nome, tid in _catalog_pages(page=page):
+        vistos[tid] = nome
+        ultima = pg
+        if time.time() - ini > 40:      # orçamento de tempo do serverless
+            done = False
+            break
+    if vistos:
+        with db() as c, c.cursor() as cur:
+            psycopg2.extras.execute_values(cur, """
+                insert into cockpit.tags_catalogo (id, tag, synced_at) values %s
+                on conflict (id) do update set tag=excluded.tag, synced_at=now()
+            """, [(i, n) for i, n in vistos.items()],
+                template="(%s,%s,now())", page_size=500)
+    _TAG_CATALOG_CACHE["map"] = None     # invalida o cache
+    total = q("select count(*) n from cockpit.tags_catalogo", one=True)["n"]
+    return _json({"ok": True, "page": page, "next_page": ultima + 1,
+                  "done": done, "tags_no_catalogo": total})
 
 
 # ─────────────────────────────────────────────────────────────────────────────
