@@ -185,6 +185,21 @@ footer b{color:var(--navy)}
 #simFaixa.on{display:flex}
 #simFaixa button{margin-left:auto;background:#4A3200;color:#FFF3DD;border:0;border-radius:7px;
   padding:5px 11px;font-size:11.5px;font-weight:700;cursor:pointer}
+
+/* ── Decisão da reunião (lida de cockpit.decisoes) ── */
+.decbox{border-radius:10px;padding:12px 14px;border-left:4px solid var(--muted);background:var(--cinza)}
+.decbox.approve{border-left-color:#1E9E6A;background:#EFFAF4}
+.decbox.phase2{border-left-color:#E8A33D;background:#FFF8EC}
+.decbox.workaround{border-left-color:#0099B5;background:#EAF8FC}
+.decbox.refuse{border-left-color:#D64550;background:#FDF0F1}
+.decbox .dtop{display:flex;align-items:center;gap:8px;flex-wrap:wrap}
+.decpill{font-size:11px;font-weight:800;border-radius:20px;padding:3px 11px;color:#fff}
+.decpill.approve{background:#1E9E6A} .decpill.phase2{background:#E8A33D}
+.decpill.workaround{background:#0099B5} .decpill.refuse{background:#D64550}
+.decbox .dmeta{font-size:11px;color:var(--muted);margin-left:auto}
+.decbox .dnota{margin-top:9px;font-size:12.5px;line-height:1.5;white-space:pre-wrap;
+  background:#fff;border:1px solid rgba(0,0,0,.06);border-radius:8px;padding:9px 11px}
+.decbox .dsem{font-size:12px;color:var(--muted)}
 </style>
 
 <script src="supabase-data.js"></script>
@@ -302,6 +317,7 @@ let tagFilterMode = "and";      // "and" = contém todas · "or" = contém qualq
 const PEND_CONS_TAG = "PENDENCIA CONSULTOR";
 const REST_TEC_TAG = "RESTRICAO TECNICA";
 let openUuid = null;
+let decisoesMap = {};   // decisões da reunião (cockpit.decisoes), por uuid e por id
 
 const $ = s => document.querySelector(s);
 const esc = s => (s||"").replace(/[&<>"]/g, c => ({"&":"&amp;","<":"&lt;",">":"&gt;",'"':"&quot;"}[c]));
@@ -327,8 +343,12 @@ async function init(){
 async function loadTickets(){
   $("#board").innerHTML = `<div class="loading">Carregando tickets de ${clienteAtual}…</div>`;
   try{
-    const j = await api("/api/tickets?cliente="+encodeURIComponent(clienteAtual));
+    const [j, dj] = await Promise.all([
+      api("/api/tickets?cliente="+encodeURIComponent(clienteAtual)),
+      api("/api/decisoes?cliente="+encodeURIComponent(clienteAtual)).catch(()=>({decisoes:{}}))
+    ]);
     tickets = j.tickets||[];
+    decisoesMap = dj.decisoes||{};
     $("#lblAtualizado").textContent = "dados de "+(j.atualizado_em||"—");
     nlmCache = {}; detailCache = {}; histCache = {}; tecCache = {}; _descPrefetched = false;
     render();
@@ -619,6 +639,9 @@ function bodyHtml(t){
         <div id="tagDrop" class="tagdrop"></div>
       </div>
     </div>
+    <div class="sec"><h4>Decisão da reunião <span class="ln"></span></h4>
+      ${decisaoBox(t)}
+    </div>
   </div>
 
   <div class="dcol">
@@ -629,6 +652,27 @@ function bodyHtml(t){
     <div class="sec"><h4>Histórico do ticket <span class="ln"></span></h4>
       <div id="dHist" class="loading">Carregando…</div>
     </div>
+  </div>`;
+}
+const DEC_LBL = {approve:"✓ Aprovado", phase2:"⏰ 2ª Fase", workaround:"🛟 Contorno", refuse:"✕ Recusado"};
+// Mostra o que foi decidido na tela de Reunião (cockpit.decisoes): a decisão, a
+// observação do cliente e a estimativa combinada. Só leitura — decidir é lá.
+function decisaoBox(t){
+  const d = decisoesMap[t.uuid] || decisoesMap[t.id] || null;
+  if(!d || !d.decisao){
+    return `<div class="decbox"><div class="dsem">Nenhuma decisão registrada na reunião ainda.
+      <a href="/gaps-reuniao.html" style="color:var(--roxo);font-weight:700">Abrir reunião →</a></div></div>`;
+  }
+  const k = d.decisao;
+  const quando = d.ts ? new Date(d.ts).toLocaleString("pt-BR") : "";
+  return `<div class="decbox ${k}">
+    <div class="dtop">
+      <span class="decpill ${k}">${DEC_LBL[k]||k}</span>
+      ${d.estimativa?`<span class="bdg est">⏱ ${d.estimativa}h combinadas</span>`:""}
+      <span class="dmeta">${esc(d.por||"")}${quando?" · "+quando:""}</span>
+    </div>
+    ${d.nota?`<div class="dnota">${esc(d.nota)}</div>`
+            :`<div class="dsem" style="margin-top:7px">Sem observação registrada.</div>`}
   </div>`;
 }
 const tagPill = tg => `<span class="tagpill" data-tag="${esc(tg)}">${esc(tg)} <b onclick="removeTag('${esc(tg)}')">✕</b></span>`;
