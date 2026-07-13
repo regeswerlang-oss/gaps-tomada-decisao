@@ -1231,6 +1231,17 @@ def api_ticket_history_post(uuid):
 # ─────────────────────────────────────────────────────────────────────────────
 @app.post("/api/refresh")
 def api_refresh():
+    """Recarrega a base do cliente.
+
+    NÃO puxa mais a lista da API do Tasks SC. Motivo (bug real, 2026-07-13): a
+    API IGNORA o filtro ?customer=, devolvendo tickets de vários clientes — e a
+    versão anterior gravava todos com o customer PEDIDO, carimbando tickets de
+    outros clientes como se fossem do selecionado (400 linhas corrompidas).
+
+    Quem mantém cockpit.tickets fresco é o cron `tickets-sync-15m` do Supabase,
+    que grava cada ticket com o customer que vem no próprio payload. Aqui só
+    devolvemos o estado atual — o front recarrega a lista do banco.
+    """
     if (r := require_auth()):
         return r
     if (sim := deny_simulacao()):
@@ -1241,58 +1252,11 @@ def api_refresh():
         return _err(404, f"Cliente '{chave}' não encontrado.")
     if (d := deny_customer(customer)):
         return d
-    started = time.time()
-    processed = upserted = 0
-    page = 1
-    try:
-        while page <= 60:
-            data, code, err = tasks_request("GET", "/tickets", params={
-                "customer": customer, "page": page, "pageSize": 100, "order": "id"})
-            if code != 200 or not isinstance(data, dict):
-                if page == 1:
-                    return _err(code or 500, f"Falha lendo tickets: {err}")
-                break
-            items = data.get("items") or []
-            for tk in items:
-                processed += 1
-                uuid = tk.get("uuid")
-                if not uuid:
-                    continue
-                cli = tk.get("customer_name_slim") or tk.get("customer_name") or nome
-                execute("""
-                    insert into cockpit.tickets
-                       (uuid_ticket, customer, cliente, titulo, status_tasks, time_estimate,
-                        due_date, user_assigned, assigned_customer, raw, synced_at, updated_at)
-                    values (%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,now(),now())
-                    on conflict (uuid_ticket) do update set
-                       customer=excluded.customer, cliente=excluded.cliente,
-                       titulo=excluded.titulo, status_tasks=excluded.status_tasks,
-                       time_estimate=excluded.time_estimate, due_date=excluded.due_date,
-                       user_assigned=excluded.user_assigned,
-                       assigned_customer=excluded.assigned_customer,
-                       raw=excluded.raw, synced_at=now(), updated_at=now()
-                """, (uuid, customer, cli, tk.get("title"),
-                      tk.get("status_description") or tk.get("status"),
-                      tk.get("time_estimate") or None,
-                      tk.get("due_date") or None, tk.get("user_assigned") or None,
-                      tk.get("assigned_customer") or None, json.dumps(tk)))
-                upserted += 1
-            if not data.get("hasNext"):
-                break
-            page += 1
-        dur = int((time.time() - started) * 1000)
-        try:
-            execute("""insert into cockpit.sync_log
-                       (source, status, started_at, finished_at, duration_ms,
-                        tickets_processed, tickets_upserted)
-                       values ('gaps-vercel','success', to_timestamp(%s), now(), %s, %s, %s)""",
-                    (started, dur, processed, upserted))
-        except Exception:
-            pass
-        return _json({"ok": True, "cliente": _slug_first(nome), "customer": customer,
-                      "processed": processed, "upserted": upserted, "duration_ms": dur})
-    except Exception as e:
-        return _err(500, f"Falha no refresh: {e}")
+    row = q("""select count(*) n, max(synced_at) s
+               from cockpit.tickets where customer=%s""", (customer,), one=True)
+    return _json({"ok": True, "cliente": _slug_first(nome), "customer": customer,
+                  "tickets": row["n"], "sincronizado_em": row["s"],
+                  "info": "Base sincronizada automaticamente a cada 15 min."})
 
 
 # ─────────────────────────────────────────────────────────────────────────────
