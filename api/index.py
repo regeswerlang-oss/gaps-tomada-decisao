@@ -450,7 +450,24 @@ def _resolve_tag_ids(values, current_tag_items):
 
 
 def tasks_update(uuid, changes):
-    """GET → merge → PUT (a API não tem PATCH)."""
+    """GET → merge → PUT (a API não tem PATCH).
+
+    TAGS: aceite APENAS o delta — `tags_add` / `tags_remove` (nomes). O delta é
+    aplicado sobre a lista AO VIVO do Tasks SC.
+
+    Por que não aceitar a lista inteira (`tags`)? Porque o PUT substitui todas as
+    tags do ticket. Se a tela mandasse a lista vinda do espelho (Supabase) e esse
+    espelho estivesse desatualizado, qualquer tag que existisse só no Tasks SC
+    seria APAGADA sem ninguém pedir. Foi exatamente o que aconteceu com a
+    RESTRICAO TECNICA. Com o delta, o que não foi citado é preservado.
+    """
+    changes = dict(changes)
+    tags_add = [str(x).strip() for x in (changes.pop("tags_add", None) or []) if str(x).strip()]
+    tags_rem = [str(x).strip() for x in (changes.pop("tags_remove", None) or []) if str(x).strip()]
+    if "tags" in changes:
+        raise ValueError(
+            "Alteração de tags deve usar tags_add/tags_remove (delta). Enviar a "
+            "lista completa é inseguro: apagaria do Tasks SC as tags ausentes do espelho.")
     unknown = set(changes) - ALLOWED_PUT
     if unknown:
         raise ValueError(f"Campos não suportados no PUT: {sorted(unknown)}")
@@ -464,20 +481,22 @@ def tasks_update(uuid, changes):
     tag_data, tcode, terr = tasks_request("GET", f"/tickets/tags/{uuid}")
     tag_data_items = tag_data.get("items") or [] if tcode == 200 else []
     tag_ids = [t["id"] for t in tag_data_items]
-    # A tela envia NOMES de tag; o PUT exige IDs. Traduz antes do merge — sem isso
-    # o Tasks SC devolve HTTP 400 ("PUT /tickets falhou").
-    if "tags" in changes:
-        changes = dict(changes)
-        ids, desconhecidas = _resolve_tag_ids(changes["tags"], tag_data_items)
+
+    if tags_add or tags_rem:
+        vivos = [str(t.get("tag") or "").strip() for t in tag_data_items]
+        vivos = [v for v in vivos if v]
+        rem_up = {r.upper() for r in tags_rem}
+        nomes = [v for v in vivos if v.upper() not in rem_up]     # preserva o resto
+        for a in tags_add:
+            if a.upper() not in [n.upper() for n in nomes]:
+                nomes.append(a)
+        ids, desconhecidas = _resolve_tag_ids(nomes, tag_data_items)
         if desconhecidas:
-            # Não dá para CRIAR tag pela API: o PUT só aceita IDs de tags que já
-            # existem no catálogo. Antes isso era descartado em silêncio — o
-            # usuário achava que tinha adicionado a tag e nada acontecia.
             raise ValueError(
-                "Tag(s) inexistente(s) no catálogo do Tasks SC: "
-                + ", ".join(desconhecidas)
+                "Tag(s) inexistente(s) no catálogo do Tasks SC: " + ", ".join(desconhecidas)
                 + ". Crie a tag no Tasks SC primeiro (aqui só dá para usar tags já cadastradas).")
         changes["tags"] = ids
+
     payload = {
         "uuid": current["uuid"], "id": current["id"],
         "title": current.get("title", "") or "",
@@ -1016,17 +1035,12 @@ def api_ticket_decidir(uuid):
         tag = mp.get(dec_ui)
         if tag:
             try:
-                tdata, tcode, _ = tasks_request("GET", f"/tickets/tags/{uuid}")
-                atuais = [str(t.get("tag")).strip() for t in (tdata.get("items") or [])] if tcode == 200 else []
-                novas = list(atuais)
-                if mp.get("swap"):
-                    outras = {str(v).upper() for k, v in mp.items() if k != "swap"}
-                    novas = [a for a in novas if a.upper() not in outras]
-                if tag.upper() not in [n.upper() for n in novas]:
-                    novas.append(tag)
-                if [n.upper() for n in novas] != [a.upper() for a in atuais]:
-                    tasks_update(uuid, {"tags": novas})
-                    _resync_tags(uuid)
+                remover = []
+                if mp.get("swap"):   # tira as outras tags de decisão
+                    remover = [str(v) for k, v in mp.items()
+                               if k != "swap" and str(v).upper() != tag.upper()]
+                tasks_update(uuid, {"tags_add": [tag], "tags_remove": remover})
+                _resync_tags(uuid)
                 tag_aplicada = tag
             except Exception as e:
                 return _json({"ok": True, "uuid": uuid, "tag": None,
@@ -1180,7 +1194,7 @@ def _mirror_ticket(uuid, changes):
                     f"where uuid_ticket=%s", vals)
         except Exception:
             pass
-    if "tags" in changes:
+    if changes.get("tags_add") or changes.get("tags_remove") or "tags" in changes:
         _resync_tags(uuid)
 
 
@@ -1220,7 +1234,14 @@ def api_ticket_update(uuid):
     except Exception as e:
         return _err(502, str(e))
     _mirror_ticket(uuid, changes)
-    return _json({"ok": True, "result": result})
+    # devolve a lista de tags que REALMENTE ficou no Tasks SC — o front usa isso
+    # como verdade, em vez de confiar no espelho.
+    tags_fim = None
+    if changes.get("tags_add") or changes.get("tags_remove"):
+        td, tc, _ = tasks_request("GET", f"/tickets/tags/{uuid}")
+        if tc == 200:
+            tags_fim = [str(t.get("tag") or "").strip() for t in (td.get("items") or [])]
+    return _json({"ok": True, "result": result, "tags": tags_fim})
 
 
 @app.post("/api/ticket/<uuid>/history")

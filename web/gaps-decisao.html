@@ -63,8 +63,8 @@ header input::placeholder{color:#9FB2CC}
 .filters label{font-size:12px;color:var(--muted);display:flex;align-items:center;gap:5px}
 
 /* ── Board ── */
-.board{display:grid;grid-template-columns:repeat(5,minmax(0,1fr));gap:12px;padding:10px 20px 30px;align-items:start}
-@media(max-width:1500px){.board{grid-template-columns:repeat(3,minmax(0,1fr))}}
+.board{display:grid;grid-template-columns:repeat(4,minmax(0,1fr));gap:12px;padding:10px 20px 30px;align-items:start}
+@media(max-width:1300px){.board{grid-template-columns:repeat(2,minmax(0,1fr))}}
 @media(max-width:1000px){.board{grid-template-columns:repeat(2,minmax(0,1fr))}}
 .col{background:#ECECF4;border-radius:12px;padding:10px;min-height:200px}
 .col.dragover{outline:2px dashed var(--roxo);outline-offset:-4px}
@@ -296,8 +296,7 @@ const CLOSED = new Set(["006","009"]);
 const COLS = [
   {key:"levantar", titulo:"📋 Levantar Requisitos", desc:"requisitos pendentes"},
   {key:"orcamento", titulo:"💰 Orçamento Pendente", desc:"aguardando orçamento"},
-  {key:"analise",  titulo:"🔍 Em Análise", desc:"sem estimativa definida"},
-  {key:"aguardcli",titulo:"⏳ Pendente com Cliente", desc:"aguardando retorno do cliente"},
+  {key:"analise",  titulo:"🔍 Em Análise / Pendente Cliente", desc:"em análise ou aguardando o cliente"},
   {key:"estimado", titulo:"✅ Estimado / Decidido", desc:"com estimativa"},
 ];
 
@@ -316,6 +315,9 @@ let tagFilterSel = new Set();   // tags selecionadas no filtro múltiplo
 let tagFilterMode = "and";      // "and" = contém todas · "or" = contém qualquer
 const PEND_CONS_TAG = "PENDENCIA CONSULTOR";
 const REST_TEC_TAG = "RESTRICAO TECNICA";
+const PEND_CLI_TAG  = "PENDENTE COM CLIENTE";           // canônica (usada ao marcar)
+const PEND_CLI_TAGS = ["PENDENTE COM CLIENTE","AGUARD. CLIENTE"];  // variantes aceitas
+const temPendCli = t => tagsOf(t).some(x=>PEND_CLI_TAGS.includes(x));
 let openUuid = null;
 let decisoesMap = {};   // decisões da reunião (cockpit.decisoes), por uuid e por id
 
@@ -362,7 +364,7 @@ const isFoco = t => tagsOf(t).some(tg=>ETAPAS.includes(tg));
 const classeOf = t => CLASSES.find(c=>tagsOf(t).includes(c)) || "";
 function colOf(t){
   const tg = tagsOf(t);
-  if(tg.includes("PENDENTE COM CLIENTE")) return "aguardcli";
+  if(PEND_CLI_TAGS.some(x=>tg.includes(x))) return "analise";   // unificada com Em Análise
   if(tg.includes("LEVANTAR REQUISITOS")||tg.includes("LEVANTAMENTO")) return "levantar";
   if(tg.includes("ORCAMENTO PENDENTE")) return "orcamento";
   if(Number(t.time_estimate)>0) return "estimado";
@@ -439,7 +441,7 @@ function render(){
     <div class="kpi"><div class="num" style="color:var(--ok)">${comNlm.length}</div><div class="lbl">Com análise NotebookLM</div></div>
     <div class="kpi"><div class="num" style="color:var(--warn)">${orc.length}</div><div class="lbl">Orçamento pendente</div></div>`;
   // Board
-  const byCol = {levantar:[],orcamento:[],analise:[],aguardcli:[],estimado:[]};
+  const byCol = {levantar:[],orcamento:[],analise:[],estimado:[]};
   vis.forEach(t=>byCol[colOf(t)].push(t));
   $("#board").innerHTML = COLS.map(c=>`
     <div class="col" data-col="${c.key}" ondragover="event.preventDefault();this.classList.add('dragover')"
@@ -449,7 +451,7 @@ function render(){
     </div>`).join("");
 }
 
-const CARD_STRUCT_TAGS = new Set([...ETAPAS, "PENDENTE COM CLIENTE", ...CLASSES]);
+const CARD_STRUCT_TAGS = new Set([...ETAPAS, ...PEND_CLI_TAGS, ...CLASSES]);
 function cardHtml(t){
   const cls = classeOf(t);
   const est = Number(t.time_estimate)||0;
@@ -515,11 +517,10 @@ async function prefetchDescricoes(){
 
 /* ════════════════ Drag & drop (gestão ágil de tags) ════════════════ */
 const DROP_RULES = {
-  levantar:{add:["LEVANTAR REQUISITOS"],remove:["ORCAMENTO PENDENTE","PENDENTE COM CLIENTE"]},
-  orcamento:{add:["ORCAMENTO PENDENTE"],remove:["LEVANTAR REQUISITOS","LEVANTAMENTO","PENDENTE COM CLIENTE"]},
-  analise:{add:[],remove:["LEVANTAR REQUISITOS","LEVANTAMENTO","ORCAMENTO PENDENTE","PENDENTE COM CLIENTE"]},
-  aguardcli:{add:["PENDENTE COM CLIENTE"],remove:[]},
-  estimado:{add:[],remove:["ORCAMENTO PENDENTE","PENDENTE COM CLIENTE"]},
+  levantar:{add:["LEVANTAR REQUISITOS"],remove:["ORCAMENTO PENDENTE",...PEND_CLI_TAGS]},
+  orcamento:{add:["ORCAMENTO PENDENTE"],remove:["LEVANTAR REQUISITOS","LEVANTAMENTO",...PEND_CLI_TAGS]},
+  analise:{add:[],remove:["LEVANTAR REQUISITOS","LEVANTAMENTO","ORCAMENTO PENDENTE"]},
+  estimado:{add:[],remove:["ORCAMENTO PENDENTE",...PEND_CLI_TAGS]},
 };
 async function onDrop(ev, col){
   ev.preventDefault();
@@ -613,6 +614,7 @@ function bodyHtml(t){
       <div style="margin-top:8px">
         <button class="chip" id="dPendCons" style="${tagsOf(t).includes(PEND_CONS_TAG)?"border-color:#A06B00;background:#FFF3DD;color:#A06B00":""}">⏸ Pendente Consultoria</button>
         <button class="chip" id="dRestTec" style="${tagsOf(t).includes(REST_TEC_TAG)?"border-color:#1E5FBF;background:#E7F0FF;color:#1E5FBF":""}">🔧 Restrição Técnica</button>
+        <button class="chip" id="dPendCli" style="${temPendCli(t)?"border-color:#0E7C86;background:#E3F6F8;color:#0E7C86":""}">⏳ Pendente com Cliente</button>
       </div>
     </div>
     <div class="sec"><h4>Decisão &amp; Estimativa <span class="ln"></span></h4>
@@ -709,6 +711,14 @@ function bindBody(t){
     const on = tagsOf(t).includes(PEND_CONS_TAG);
     $("#dPendCons").style.cssText = on?"border-color:#A06B00;background:#FFF3DD;color:#A06B00":"";
   };
+  $("#dPendCli").onclick = async ()=>{
+    const tem = temPendCli(t);   // qualquer uma das variantes conta
+    const novas = tem ? (t.tags||[]).filter(x=>!PEND_CLI_TAGS.includes(String(x).toUpperCase()))
+                      : [...(t.tags||[]), PEND_CLI_TAG];   // ao marcar, usa a canônica
+    await saveTags(t, novas, tem?`− pendente com cliente`:`+ ${PEND_CLI_TAG}`);
+    const on = temPendCli(t);
+    $("#dPendCli").style.cssText = on?"border-color:#0E7C86;background:#E3F6F8;color:#0E7C86":"";
+  };
   $("#dRestTec").onclick = async ()=>{
     const tem = tagsOf(t).includes(REST_TEC_TAG);
     const novas = tem ? (t.tags||[]).filter(x=>String(x).toUpperCase()!==REST_TEC_TAG)
@@ -753,14 +763,28 @@ function bindBody(t){
   };
 }
 
-async function saveTags(t, novas, label){ return saveChanges(t, {tags:novas}, label); }
+// Manda apenas a INTENÇÃO (o que entra / o que sai). O backend aplica esse delta
+// sobre as tags AO VIVO do Tasks SC — assim uma tag que exista lá mas não esteja
+// no nosso espelho jamais é apagada por engano.
+async function saveTags(t, novas, label){
+  const atuaisU = (t.tags||[]).map(x=>String(x).toUpperCase());
+  const novasU  = novas.map(x=>String(x).toUpperCase());
+  const add    = novas.filter(x=>!atuaisU.includes(String(x).toUpperCase()));
+  const remove = (t.tags||[]).filter(x=>!novasU.includes(String(x).toUpperCase()));
+  if(!add.length && !remove.length) return;
+  return saveChanges(t, {tags_add:add, tags_remove:remove}, label);
+}
 async function saveChanges(t, changes, label){
   $("#dMsg").textContent = "Salvando…";
   try{
-    await api(`/api/ticket/${t.uuid}/update`,{method:"POST",headers:{"Content-Type":"application/json"},body:JSON.stringify(changes)});
-    Object.assign(t, changes);
+    const resp = await api(`/api/ticket/${t.uuid}/update`,{method:"POST",headers:{"Content-Type":"application/json"},body:JSON.stringify(changes)});
+    const {tags_add, tags_remove, ...campos} = changes;   // delta não é campo do ticket
+    Object.assign(t, campos);
     if(changes.status) t.status_description = STATUS[changes.status]||t.status_description;
-    if(changes.tags) $("#dTags").innerHTML = changes.tags.map(tagPill).join("");
+    if(resp && resp.tags){          // verdade vinda do Tasks SC após o PUT
+      t.tags = resp.tags;
+      const el = $("#dTags"); if(el) el.innerHTML = t.tags.map(tagPill).join("");
+    }
     $("#dMsg").textContent = "Salvo às "+new Date().toLocaleTimeString("pt-BR");
     toast(`#${t.id} — ${label} ✓`,"ok"); render();
   }catch(e){ $("#dMsg").textContent=""; toast("Falha: "+e.message,"err"); }
