@@ -372,50 +372,81 @@ def tasks_request(method, path, params=None, body=None, _retry=True):
 _TAG_CATALOG_CACHE = {"map": None, "exp": 0}
 
 
-def _tags_catalog_map():
-    """{NOME_TAG_UPPER: id} do catálogo completo do Tasks SC (cacheado 10 min)."""
-    now = time.time()
-    if _TAG_CATALOG_CACHE["map"] is not None and _TAG_CATALOG_CACHE["exp"] > now:
-        return _TAG_CATALOG_CACHE["map"]
-    m, page = {}, 1
-    while page <= 25:
-        data, code, _ = tasks_request("GET", "/tickets/tags", params={
-            "page": page, "pageSize": 200, "order": "tag", "fields": "id,tag"})
+def _catalog_pages(max_pages=120, search=None):
+    """Itera o catálogo de tags do Tasks SC.
+
+    CUIDADO: este endpoint devolve UMA LINHA POR ASSOCIAÇÃO (a mesma tag repete
+    para cada ticket que a usa), ordenado por nome. Por isso não dá para parar
+    nas primeiras páginas: um catálogo truncado esconde as tags do fim do
+    alfabeto (foi o que aconteceu com PENDENTE COM CLIENTE).
+    """
+    page = 1
+    while page <= max_pages:
+        params = {"page": page, "pageSize": 200, "order": "tag", "fields": "id,tag"}
+        if search:
+            params["search"] = search
+        data, code, _ = tasks_request("GET", "/tickets/tags", params=params)
         if code != 200 or not isinstance(data, dict):
-            break
+            return
         for it in (data.get("items") or []):
             if it.get("tag"):
-                m[str(it["tag"]).strip().upper()] = it["id"]
+                yield str(it["tag"]).strip(), it["id"]
         if not data.get("hasNext"):
-            break
+            return
         page += 1
+
+
+def _tags_catalog_map(force=False):
+    """{NOME_UPPER: id} do catálogo completo (cacheado 10 min)."""
+    now = time.time()
+    if not force and _TAG_CATALOG_CACHE["map"] is not None and _TAG_CATALOG_CACHE["exp"] > now:
+        return _TAG_CATALOG_CACHE["map"]
+    m = {}
+    for nome, tid in _catalog_pages():
+        m.setdefault(nome.upper(), tid)
     if m:
         _TAG_CATALOG_CACHE["map"] = m
         _TAG_CATALOG_CACHE["exp"] = now + 600
     return m
 
 
+def _find_tag_id(nome):
+    """Acha o id de UMA tag pelo nome, mesmo que o catálogo em cache esteja
+    incompleto: 1) cache; 2) busca direcionada na API; 3) varredura com saída
+    antecipada. Devolve None só se a tag realmente não existir."""
+    alvo = str(nome).strip().upper()
+    mp = _tags_catalog_map()
+    if alvo in mp:
+        return mp[alvo]
+    # 2) busca direcionada (bem mais barata que varrer tudo)
+    for n, tid in _catalog_pages(max_pages=10, search=str(nome).strip()):
+        if n.upper() == alvo:
+            mp[alvo] = tid
+            return tid
+    # 3) varredura completa com saída assim que encontrar
+    for n, tid in _catalog_pages():
+        if n.upper() == alvo:
+            mp[alvo] = tid
+            return tid
+    return None
+
+
 def _resolve_tag_ids(values, current_tag_items):
-    """A tela manda NOMES de tag; o PUT exige IDs (zero-padded). Traduz nome→id
-    usando as tags atuais do ticket (garante que nenhuma existente se perca) +
-    o catálogo completo (para tags novas). Valores que já são ID passam direto."""
+    """A tela manda NOMES de tag; o PUT exige IDs. Traduz usando as tags atuais do
+    ticket (garante que nenhuma existente se perca) + o catálogo. Devolve também
+    as que realmente não existem, para o app avisar em vez de descartar calado."""
     name2id = {}
     for t in (current_tag_items or []):
         if t.get("tag"):
             name2id[str(t["tag"]).strip().upper()] = t["id"]
-    try:
-        for nm, tid in _tags_catalog_map().items():
-            name2id.setdefault(nm, tid)
-    except Exception:
-        pass
     out, seen, desconhecidas = [], set(), []
     for x in values:
         s = str(x).strip()
         if not s:
             continue
-        tid = s if re.fullmatch(r"\d{3,}", s) else name2id.get(s.upper())
+        tid = s if re.fullmatch(r"\d{3,}", s) else (name2id.get(s.upper()) or _find_tag_id(s))
         if not tid:
-            desconhecidas.append(s)      # não existe no catálogo do Tasks SC
+            desconhecidas.append(s)
             continue
         if tid not in seen:
             seen.add(tid)
@@ -1088,34 +1119,17 @@ def api_ticket_history(uuid):
 
 @app.get("/api/tags-catalog")
 def api_tags_catalog():
+    """Catálogo para o autocomplete. Usa o mapa completo (deduplicado) — o
+    endpoint da API repete a tag por associação, então nunca pagine 'só um
+    pouco': o alfabeto fica cortado."""
     if (r := require_auth()):
         return r
     search = request.args.get("search", "").strip().upper()
-    items, page = [], 1
-    while page <= 25:
-        data, code, err = tasks_request("GET", "/tickets/tags", params={
-            "page": page, "pageSize": 200, "order": "tag", "fields": "id,tag"})
-        if code != 200 or not isinstance(data, dict):
-            if page == 1:
-                return _err(code or 500, f"Falha no catálogo: {err}")
-            break
-        items += data.get("items") or []
-        if not data.get("hasNext"):
-            break
-        page += 1
-    # o endpoint devolve uma linha por associação → de-duplica por id (mesma tag
-    # aparecia várias vezes no picker). Mantém a 1ª ocorrência, ordenado por nome.
-    seen, uniq = set(), []
-    for it in items:
-        k = it.get("id") or (it.get("tag") or "").upper()
-        if not k or k in seen:
-            continue
-        seen.add(k)
-        uniq.append(it)
-    uniq.sort(key=lambda i: (i.get("tag") or "").upper())
-    items = uniq
+    mp = _tags_catalog_map()
+    items = [{"id": tid, "tag": nome} for nome, tid in
+             sorted(((n, i) for n, i in mp.items()), key=lambda x: x[0])]
     if search:
-        items = [i for i in items if search in (i.get("tag") or "").upper()]
+        items = [i for i in items if search in i["tag"]]
     return _json({"ok": True, "items": items})
 
 
