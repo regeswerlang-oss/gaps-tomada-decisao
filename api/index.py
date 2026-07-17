@@ -23,7 +23,16 @@ Auth / páginas
   POST /api/logout            → limpa a sessão
   GET  /api/me                → sessão atual (+ perfil)
 
-Acessos — perfis admin | comum | cliente (ver `require_tasks_write`)
+Acessos — perfis admin | comum | cliente | leitor
+  Matriz (o que cada um GRAVA; todos leem só os clientes liberados, menos o
+  admin, que vê tudo):
+                 Tasks SC   decisão/estimativa   admin de acessos   própria senha
+    admin           sim            sim                 sim               sim
+    comum           sim            sim                 não               sim
+    cliente         não            sim                 não               sim
+    leitor          não            não                 não               sim
+  Portões: require_tasks_write() (barra cliente+leitor) · require_write()
+  (barra leitor) · require_admin() · deny_simulacao() (barra o 'ver como').
   GET  /api/admin/usuarios                     → usuários + clientes liberados
   POST /api/admin/usuarios                     → cria/edita {email,nome,perfil,senha?}
   POST /api/admin/usuarios/<email>/ativo       → {ativo}
@@ -231,8 +240,17 @@ def is_admin(email):
 #           ocorrência, decisão).
 # cliente → só os clientes liberados; LÊ e DECIDE/ESTIMA (cockpit.decisoes),
 #           mas não altera nada no Tasks SC.
-PERFIS = ("admin", "comum", "cliente")
-PERFIL_LABEL = {"admin": "Administrador", "comum": "Comum", "cliente": "Cliente"}
+# leitor  → só os clientes liberados; LÊ e mais nada. Não decide, não estima,
+#           não toca no Tasks SC. Único write: a própria senha.
+#
+# Dois portões, um por "destino" da escrita:
+#   require_tasks_write() → escritas que SAEM para o Tasks SC  (barra cliente e leitor)
+#   require_write()       → escritas no nosso banco: decisão/estimativa (barra leitor)
+PERFIS = ("admin", "comum", "cliente", "leitor")
+PERFIL_LABEL = {"admin": "Administrador", "comum": "Comum",
+                "cliente": "Cliente", "leitor": "Leitor (somente leitura)"}
+# Perfis que não gravam NADA (exceto a própria senha).
+PERFIS_SO_LEITURA = ("leitor",)
 
 
 def perfil_de(email):
@@ -285,15 +303,38 @@ def require_auth():
     return _err(401, "Não autenticado.")
 
 
-def require_tasks_write():
-    """Portão das escritas que saem deste app: alterar a Task, tags, ocorrência,
-    catálogo, refresh e rascunho de e-mail. O perfil 'cliente' consulta e decide,
-    mas não mexe no Tasks SC. Usa o usuário REAL — durante o 'ver como' quem
-    barra é o deny_simulacao()."""
+def require_write():
+    """Portão de QUALQUER escrita de conteúdo — inclusive a decisão/estimativa,
+    que fica no nosso banco (cockpit.decisoes) e não sai para o Tasks SC.
+    Só o perfil 'leitor' é barrado aqui. Usa o usuário REAL — durante o 'ver
+    como' quem barra é o deny_simulacao().
+
+    Exceção deliberada: /api/conta/senha. Trocar a própria senha é uma escrita,
+    mas é sobre a própria conta — o leitor precisa poder.
+    """
     email = current_user()
     if not email:
         return _err(401, "Não autenticado.")
-    if perfil_de(email) == "cliente":
+    if perfil_de(email) in PERFIS_SO_LEITURA:
+        return _err(403, "Seu perfil (Leitor) é somente de visualização: "
+                         "você consulta os GAPs, mas não grava nada.")
+    return None
+
+
+def require_tasks_write():
+    """Portão das escritas que saem deste app para o Tasks SC: alterar a Task,
+    tags, ocorrência, catálogo, refresh e rascunho de e-mail. O perfil 'cliente'
+    consulta e decide, mas não mexe no Tasks SC; o 'leitor' não faz nem uma
+    coisa nem outra. Usa o usuário REAL — durante o 'ver como' quem barra é o
+    deny_simulacao()."""
+    email = current_user()
+    if not email:
+        return _err(401, "Não autenticado.")
+    perfil = perfil_de(email)
+    if perfil in PERFIS_SO_LEITURA:
+        return _err(403, "Seu perfil (Leitor) é somente de visualização: "
+                         "você consulta os GAPs, mas não grava nada.")
+    if perfil == "cliente":
         return _err(403, "Seu perfil (Cliente) permite consultar e decidir, "
                          "mas não alterar dados no Tasks SC.")
     return None
@@ -703,8 +744,11 @@ def api_me():
     perfil = perfil_de(real)
     return _json({"ok": True, "email": real, "nome": s.get("n"), "is_admin": adm,
                   "perfil": perfil, "perfil_label": PERFIL_LABEL.get(perfil, perfil),
-                  # o front usa isto para esconder o que o backend já barraria
-                  "pode_escrever_tasks": perfil != "cliente",
+                  # O front usa isto só para ESCONDER o que o backend já barraria.
+                  # A regra de verdade está em require_tasks_write/require_write.
+                  "pode_escrever_tasks": perfil not in ("cliente",) + PERFIS_SO_LEITURA,
+                  "pode_decidir": perfil not in PERFIS_SO_LEITURA,
+                  "somente_leitura": perfil in PERFIS_SO_LEITURA,
                   "view_as": alvo, "efetivo": alvo or real,
                   "perfil_efetivo": perfil_de(alvo) if alvo else perfil})
 
@@ -1187,6 +1231,8 @@ def _resolve_uuid(key, customer):
 def api_decisoes_post():
     if (r := require_auth()):
         return r
+    if (w := require_write()):
+        return w
     if (sim := deny_simulacao()):
         return sim
     chave = request.args.get("cliente", "digitro")
@@ -1258,6 +1304,8 @@ def api_decisoes_importar():
     altera estimativa — isso é feito depois, sob confirmação, item a item."""
     if (r := require_auth()):
         return r
+    if (w := require_write()):
+        return w
     if (sim := deny_simulacao()):
         return sim
     chave = request.args.get("cliente", "")
@@ -1317,6 +1365,8 @@ def api_ticket_decidir(uuid):
     Body: {decisao, estimativa?, nota?, classe?, aplicar_tag?(default true)}."""
     if (r := require_auth()):
         return r
+    if (w := require_write()):
+        return w
     if (sim := deny_simulacao()):
         return sim
     if (g := deny_uuid(uuid)):

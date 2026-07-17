@@ -67,22 +67,39 @@ SQL Editor do Supabase.
 mantém `perfil` ⇄ `is_admin` coerentes (o cockpit Next.js ainda lê `is_admin`) e
 a tabela `usuario_clientes`. É idempotente. Aplicada em 17/07/2026.
 
-### Os três perfis
+`sql/0007_perfil_leitor.sql` — amplia a constraint de `perfil` para aceitar
+`leitor`. Idempotente. Aplicada em 17/07/2026.
+
+### Os quatro perfis
 
 | Perfil | Clientes que vê | Decide/estima | Altera o Tasks SC | Administra acessos |
 |---|---|---|---|---|
 | **admin** | todos | ✅ | ✅ | ✅ |
 | **comum** | só os liberados | ✅ | ✅ | ❌ |
 | **cliente** | só os liberados | ✅ | ❌ (HTTP 403) | ❌ |
+| **leitor** | só os liberados | ❌ (HTTP 403) | ❌ (HTTP 403) | ❌ |
 
-**Modo estrito**: usuário comum/cliente **sem nenhum cliente liberado não vê
-nada** — o cliente some do combo e os tickets retornam 403. Marcar "todos" no
+**Modo estrito**: usuário comum/cliente/leitor **sem nenhum cliente liberado não
+vê nada** — o cliente some do combo e os tickets retornam 403. Marcar "todos" no
 front não fura: o recorte é server-side, em `allowed_customers()`.
 
-O perfil **cliente** é barrado por `require_tasks_write()` nas rotas
-`POST /api/ticket/<uuid>/update`, `.../history`, `/api/tags/sync`,
-`/api/refresh` e `/api/gmail/draft`. Decisão/estimativa (`/api/decisoes`)
-continua liberada — ela grava em `cockpit.decisoes`, não no Tasks SC.
+Dois portões, um por destino da escrita:
+
+- `require_tasks_write()` — barra **cliente** e **leitor** nas rotas que saem
+  para o Tasks SC: `POST /api/ticket/<uuid>/update`, `.../history`,
+  `/api/tags/sync`, `/api/refresh` e `/api/gmail/draft`.
+- `require_write()` — barra o **leitor** nas rotas que gravam decisão/estimativa
+  no nosso banco (`cockpit.decisoes`): `POST /api/decisoes`,
+  `/api/decisoes/importar` e `/api/ticket/<uuid>/decidir`.
+
+O **leitor** é somente visualização: lê tudo dos clientes liberados (GAPs,
+histórico, NotebookLM, decisão e estimativa já registradas), exporta CSV/JSON/PDF
+— que são gerados no browser — e não grava **nada**. A única escrita que sobra
+para ele é a própria senha (`POST /api/conta/senha`), que é sobre a conta dele.
+
+O front esconde as ações (`GET /api/me` devolve `somente_leitura`,
+`pode_decidir` e `pode_escrever_tasks`), mas isso é cosmético: **quem barra é o
+backend**, e ele reconfere pelo usuário REAL da sessão.
 
 ### Fluxo de cadastro
 

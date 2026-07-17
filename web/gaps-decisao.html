@@ -183,6 +183,16 @@ footer b{color:var(--navy)}
 #simFaixa{display:none;align-items:center;gap:10px;background:#FFC53D;color:#4A3200;
   padding:8px 20px;font-size:13px;font-weight:700}
 #simFaixa.on{display:flex}
+/* Perfil leitor: esconde toda ação de escrita. Vitrine, não bancada.
+   É só cosmético — quem barra de verdade é require_write/require_tasks_write. */
+body.so-leitura #btnRefresh,
+body.so-leitura #btnSync,
+body.so-leitura #btnAcoes,
+body.so-leitura #btnSalvar,
+body.so-leitura #btnDesc,
+body.so-leitura #btnEst,
+body.so-leitura #btnTec,
+body.so-leitura #btnAddTag{display:none}
 #simFaixa button{margin-left:auto;background:#4A3200;color:#FFF3DD;border:0;border-radius:7px;
   padding:5px 11px;font-size:11.5px;font-weight:700;cursor:pointer}
 
@@ -1036,9 +1046,18 @@ async function initViewAs(){
   const sel = document.getElementById("viewAs");
   const faixa = document.getElementById("simFaixa");
   document.getElementById("btnConta").title = `${me.nome||me.email} · ${me.perfil_label||""} — minha conta`;
+  // Perfil "leitor": somente visualização — o backend recusa QUALQUER escrita
+  // (403), inclusive a decisão/estimativa. Avisamos aqui e escondemos as ações.
+  if(me.somente_leitura){
+    document.body.classList.add("so-leitura");
+    faixa.classList.add("on");
+    document.getElementById("simTxt").textContent =
+      "Perfil Leitor — somente visualização. Você consulta os GAPs, o histórico e as estimativas, mas não altera a Task, tags, ocorrências nem decisões.";
+    faixa.querySelector("button").style.display = "none";
+  }
   // Perfil "cliente": consulta e decide, mas o backend recusa escrita no Tasks SC
   // (HTTP 403). Avisamos aqui para o erro não chegar como surpresa no Salvar.
-  if(me.perfil === "cliente"){
+  else if(me.perfil === "cliente"){
     faixa.classList.add("on");
     document.getElementById("simTxt").textContent =
       "Perfil Cliente — você pode consultar e decidir/estimar. Alterações na Task, tags e ocorrências estão bloqueadas.";

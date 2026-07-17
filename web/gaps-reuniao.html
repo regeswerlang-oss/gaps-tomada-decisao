@@ -164,6 +164,10 @@ button{font-family:inherit;cursor:pointer}
 #simFaixa{display:none;align-items:center;gap:10px;background:#FFC53D;color:#4A3200;
   padding:8px 20px;font-size:13px;font-weight:700}
 #simFaixa.on{display:flex}
+/* Perfil leitor: nada de decidir nem estimar — só olhar (o backend reconfere) */
+body.so-leitura .btn-decide,
+body.so-leitura [data-setest]{display:none}
+body.so-leitura input[data-est]{pointer-events:none;opacity:.6}
 #simFaixa button{margin-left:auto;background:#4A3200;color:#FFF3DD;border:0;border-radius:7px;
   padding:5px 11px;font-size:11.5px;font-weight:700;cursor:pointer}
 </style>
@@ -464,10 +468,23 @@ async function loadDesc(code){
 /* ════════════════ "Ver como" — admin simula a visão de outro usuário ════════
    A simulação só RESTRINGE o escopo (o backend reconfere se quem está logado é
    admin de verdade). Durante a simulação, toda ESCRITA é bloqueada (HTTP 409). */
+let SO_LEITURA = false;   // perfil "leitor": a tela inteira vira vitrine
+
 async function initViewAs(){
   let me; try{ me = await api("/api/me"); }catch(_){ return; }
   const sel = document.getElementById("viewAs");
   const faixa = document.getElementById("simFaixa");
+  // Perfil "leitor": o backend recusa /decidir e /decisoes (403). Escondemos as
+  // ações aqui para o erro não chegar como surpresa depois de decidir 40 GAPs.
+  if(me.somente_leitura){
+    SO_LEITURA = true;
+    document.body.classList.add("so-leitura");
+    faixa.classList.add("on");
+    document.getElementById("simTxt").textContent =
+      "Perfil Leitor — somente visualização. Você consulta os GAPs, as decisões e as estimativas, mas não grava nada.";
+    const b = faixa.querySelector("button"); if(b) b.style.display = "none";
+    ["btnSave","btnReset"].forEach(id=>{ const e=document.getElementById(id); if(e) e.style.display="none"; });
+  }
   if(me.view_as){
     faixa.classList.add("on");
     document.getElementById("simTxt").textContent =
@@ -494,6 +511,7 @@ async function sairSimulacao(){
 initViewAs();
 
 function decide(code, act){
+  if(SO_LEITURA) return toast("Perfil Leitor — somente visualização.", "refuse");
   decisions[code]=decisions[code]||{};
   decisions[code].decision = decisions[code].decision===act ? null : act;
   decisions[code].ts = new Date().toISOString();
@@ -563,6 +581,7 @@ function applyFilter(){
 
 /* ════════ Persistência local ════════ */
 async function saveServer(){
+  if(SO_LEITURA) return toast("Perfil Leitor — somente visualização.", "refuse");
   try{ await api("/api/decisoes?cliente="+encodeURIComponent(clienteAtual),{method:"POST",headers:{"Content-Type":"application/json"},body:JSON.stringify({decisoes})}); dirty=false; updateLastSaved("agora"); toast("Decisões salvas localmente ✓","approve"); }
   catch(e){ toast("Falha ao salvar: "+e.message,"refuse"); }
 }
