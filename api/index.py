@@ -65,6 +65,7 @@ import time
 import unicodedata
 from datetime import datetime, timezone
 from pathlib import Path
+from urllib.parse import unquote
 
 import psycopg2
 import psycopg2.extras
@@ -726,7 +727,7 @@ def api_view_as():
     if (r := require_admin()):
         return r
     body = request.get_json(silent=True) or {}
-    alvo = (body.get("email") or "").strip().lower() or None
+    alvo = _norm_email(body.get("email")) or None
     if alvo:
         u = q("select email from cockpit.usuarios_login where lower(email)=%s",
               (alvo,), one=True)
@@ -745,7 +746,20 @@ def api_view_as():
 # Administração de acessos — só admin (tela /admin)
 # ─────────────────────────────────────────────────────────────────────────────
 def _norm_email(s):
-    return (s or "").strip().lower()
+    """Normaliza o e-mail vindo do corpo OU da URL.
+
+    Armadilha real: o front manda `encodeURIComponent(email)` no path
+    (`.../usuarios/diego.rcosta%40totvs.com.br/clientes`). O WSGI deveria
+    entregar o PATH_INFO já decodificado, mas na função serverless da Vercel o
+    `%40` chegava cru — o `lower()` comparava "diego.rcosta%40totvs.com.br"
+    com o e-mail do banco e dava "Usuário não encontrado" em TODAS as ações da
+    linha do usuário (clientes, senha, perfil, ativo). O unquote aqui é o ponto
+    único de defesa e é inofensivo para e-mail já decodificado.
+    """
+    s = (s or "").strip()
+    if "%" in s:
+        s = unquote(s)
+    return s.strip().lower()
 
 
 def _usuario(email):
@@ -848,7 +862,7 @@ def api_admin_usuario_ativo(email):
         return sim
     email = _norm_email(email)
     if not _usuario(email):
-        return _err(404, "Usuário não encontrado.")
+        return _err(404, f"Usuário não encontrado: {email}")
     ativo = bool((request.get_json(silent=True) or {}).get("ativo"))
     if email == _norm_email(current_user()) and not ativo:
         return _err(400, "Você não pode inativar o seu próprio usuário.")
@@ -867,7 +881,7 @@ def api_admin_usuario_perfil(email):
         return sim
     email = _norm_email(email)
     if not _usuario(email):
-        return _err(404, "Usuário não encontrado.")
+        return _err(404, f"Usuário não encontrado: {email}")
     perfil = (request.get_json(silent=True) or {}).get("perfil", "")
     perfil = str(perfil).strip().lower()
     if perfil not in PERFIS:
@@ -888,7 +902,7 @@ def api_admin_usuario_senha(email):
         return sim
     email = _norm_email(email)
     if not _usuario(email):
-        return _err(404, "Usuário não encontrado.")
+        return _err(404, f"Usuário não encontrado: {email}")
     senha = (request.get_json(silent=True) or {}).get("senha") or ""
     if (msg := valida_senha(senha)):
         return _err(400, msg)
@@ -909,7 +923,7 @@ def api_admin_usuario_clientes(email):
     email = _norm_email(email)
     u = _usuario(email)
     if not u:
-        return _err(404, "Usuário não encontrado.")
+        return _err(404, f"Usuário não encontrado: {email}")
     body = request.get_json(silent=True) or {}
     pedidos = body.get("customers")
     if not isinstance(pedidos, list):
