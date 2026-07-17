@@ -54,16 +54,50 @@ setar/alterar, faça **Redeploy**.
 > A senha do banco e a `TASKS_PASSWORD` só existem aqui (backend). Nunca vão
 > para o frontend nem para o Git.
 
-## 5. Usuários de acesso
+## 5. Usuários e controle de acesso
 
-Já existem 3 na allowlist `cockpit.usuarios_login` (reges, percio, juciane).
-Se souber a senha deles, o login já funciona (o verificador detecta o N do
-scrypt automaticamente). Para criar/redefinir uma senha:
+Tudo se faz pela tela **`/admin`** (botão **⚙ Acessos** no header, visível só
+para admin). O `scripts/set_password.py` continua servindo como saída de
+emergência — se você se trancar do lado de fora, ele gera o SQL para colar no
+SQL Editor do Supabase.
 
-```bash
-python3 scripts/set_password.py fulano@totvs.com.br "SenhaForte" "Nome Fulano"
-# copie o SQL impresso e rode no Supabase → SQL Editor
-```
+### Migration (uma vez)
+
+`sql/0006_perfis_acesso.sql` — cria `perfil` em `usuarios_login`, o trigger que
+mantém `perfil` ⇄ `is_admin` coerentes (o cockpit Next.js ainda lê `is_admin`) e
+a tabela `usuario_clientes`. É idempotente. Aplicada em 17/07/2026.
+
+### Os três perfis
+
+| Perfil | Clientes que vê | Decide/estima | Altera o Tasks SC | Administra acessos |
+|---|---|---|---|---|
+| **admin** | todos | ✅ | ✅ | ✅ |
+| **comum** | só os liberados | ✅ | ✅ | ❌ |
+| **cliente** | só os liberados | ✅ | ❌ (HTTP 403) | ❌ |
+
+**Modo estrito**: usuário comum/cliente **sem nenhum cliente liberado não vê
+nada** — o cliente some do combo e os tickets retornam 403. Marcar "todos" no
+front não fura: o recorte é server-side, em `allowed_customers()`.
+
+O perfil **cliente** é barrado por `require_tasks_write()` nas rotas
+`POST /api/ticket/<uuid>/update`, `.../history`, `/api/tags/sync`,
+`/api/refresh` e `/api/gmail/draft`. Decisão/estimativa (`/api/decisoes`)
+continua liberada — ela grava em `cockpit.decisoes`, não no Tasks SC.
+
+### Fluxo de cadastro
+
+1. `/admin` → **Novo usuário**: e-mail, nome, perfil e senha inicial (≥ 8
+   caracteres, hash scrypt gerado no servidor — a senha em claro nunca é gravada).
+2. Na linha do usuário → **Clientes** → marque o que ele enxerga → **Salvar
+   liberação**.
+3. **Editar** troca nome/perfil e redefine senha; **Inativar** corta o login.
+4. Cada um troca a própria senha em `/admin` → **Minha conta**.
+
+Auto-proteções: o admin não consegue se inativar nem tirar o próprio
+`is_admin` — nem pela tela, nem pela API.
+
+Para conferir a visão de alguém sem saber a senha dele, use o **👁 Ver como**
+no header do board (só admin; escrita bloqueada durante a simulação).
 
 ## 6. Deploy e teste
 
@@ -79,7 +113,12 @@ python3 scripts/set_password.py fulano@totvs.com.br "SenhaForte" "Nome Fulano"
 
 ```
 GET  /                    /gaps-decisao.html   /gaps-reuniao.html   (login)
+GET  /admin                                                         (login)
 GET  /login    POST /api/login   POST /api/logout   GET /api/me
+GET  /api/admin/usuarios               POST /api/admin/usuarios          (admin)
+POST /api/admin/usuarios/<email>/ativo    /perfil    /senha    /clientes (admin)
+GET  /api/admin/clientes                                                 (admin)
+POST /api/conta/senha                          {atual, nova}
 GET  /api/clientes
 GET  /api/tickets?cliente=digitro
 GET  /api/decisoes?cliente=digitro     POST /api/decisoes?cliente=digitro

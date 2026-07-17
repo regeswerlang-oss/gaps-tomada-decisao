@@ -18,9 +18,20 @@ Auth / páginas
   GET  /gaps-decisao.html     → idem (exige login)
   GET  /gaps-reuniao.html     → tela de reunião (exige login)
   GET  /login                 → login.html (público)
+  GET  /admin                 → admin.html (tela de acessos; exige login)
   POST /api/login             → {email, senha} → cookie de sessão
   POST /api/logout            → limpa a sessão
-  GET  /api/me                → sessão atual
+  GET  /api/me                → sessão atual (+ perfil)
+
+Acessos — perfis admin | comum | cliente (ver `require_tasks_write`)
+  GET  /api/admin/usuarios                     → usuários + clientes liberados
+  POST /api/admin/usuarios                     → cria/edita {email,nome,perfil,senha?}
+  POST /api/admin/usuarios/<email>/ativo       → {ativo}
+  POST /api/admin/usuarios/<email>/perfil      → {perfil}
+  POST /api/admin/usuarios/<email>/senha       → {senha} (admin redefine)
+  POST /api/admin/usuarios/<email>/clientes    → {customers:[...]} (checklist)
+  GET  /api/admin/clientes                     → catálogo p/ o checklist
+  POST /api/conta/senha                        → {atual, nova} (própria senha)
 
 Dados (Supabase) — exigem login
   GET  /api/clientes                       → cockpit.clientes
@@ -49,6 +60,7 @@ import hmac
 import json
 import os
 import re
+import secrets
 import time
 import unicodedata
 from datetime import datetime, timezone
@@ -212,6 +224,28 @@ def is_admin(email):
     return bool(r and r["adm"])
 
 
+# ── Perfis de acesso ─────────────────────────────────────────────────────────
+# admin   → vê todos os clientes e administra os acessos.
+# comum   → só os clientes liberados, mas escreve tudo neles (Task, tags,
+#           ocorrência, decisão).
+# cliente → só os clientes liberados; LÊ e DECIDE/ESTIMA (cockpit.decisoes),
+#           mas não altera nada no Tasks SC.
+PERFIS = ("admin", "comum", "cliente")
+PERFIL_LABEL = {"admin": "Administrador", "comum": "Comum", "cliente": "Cliente"}
+
+
+def perfil_de(email):
+    """Perfil do usuário. Faz fallback pelo is_admin caso a coluna ainda esteja
+    vazia (banco sem a migration 0006)."""
+    if not email:
+        return None
+    r = q("""select coalesce(nullif(perfil,''),
+                    case when coalesce(is_admin,false) then 'admin' else 'comum' end) as p
+             from cockpit.usuarios_login where lower(email)=%s""",
+          (email.lower(),), one=True)
+    return r["p"] if r else None
+
+
 def effective_user():
     """Usuário cuja VISÃO vale. Só honra o 'ver como' se quem está logado for
     admin de verdade — a simulação jamais amplia acesso, apenas restringe."""
@@ -250,6 +284,20 @@ def require_auth():
     return _err(401, "Não autenticado.")
 
 
+def require_tasks_write():
+    """Portão das escritas que saem deste app: alterar a Task, tags, ocorrência,
+    catálogo, refresh e rascunho de e-mail. O perfil 'cliente' consulta e decide,
+    mas não mexe no Tasks SC. Usa o usuário REAL — durante o 'ver como' quem
+    barra é o deny_simulacao()."""
+    email = current_user()
+    if not email:
+        return _err(401, "Não autenticado.")
+    if perfil_de(email) == "cliente":
+        return _err(403, "Seu perfil (Cliente) permite consultar e decidir, "
+                         "mas não alterar dados no Tasks SC.")
+    return None
+
+
 # ── Controle de acesso por CLIENTE (customer) ────────────────────────────────
 # Regra (modo estrito, igual ao dashboard Next.js do cockpit):
 #   admin           → None  = vê TODOS os clientes.
@@ -286,6 +334,24 @@ def deny_uuid(uuid):
     if cust and cust in allowed:
         return None
     return _err(403, "Sem acesso a este ticket.")
+
+
+def hash_scrypt(senha: str) -> str:
+    """Gera `scrypt$<salt hex>$<hash hex>` no MESMO formato do scripts/set_password.py
+    e do Node do Cockpit: o salt entra como STRING (o próprio hex em UTF-8),
+    N=16384, r=8, p=1, dklen=64. Assim a senha criada aqui vale nos dois apps.
+    A senha em claro nunca é gravada nem logada."""
+    salt_hex = secrets.token_hex(16)
+    dk = hashlib.scrypt(senha.encode(), salt=salt_hex.encode(), n=16384, r=8, p=1,
+                        dklen=64, maxmem=132 * 1024 * 1024)
+    return f"scrypt${salt_hex}${dk.hex()}"
+
+
+def valida_senha(senha: str):
+    """None se a senha serve; senão a mensagem do problema."""
+    if len(senha or "") < 8:
+        return "A senha precisa ter ao menos 8 caracteres."
+    return None
 
 
 def verify_scrypt(stored: str, senha: str) -> bool:
@@ -581,6 +647,16 @@ def page_import():
     return serve_file("gaps-import.html")
 
 
+@app.get("/admin")
+@app.get("/admin.html")
+def page_admin():
+    """Tela de acessos. Exige login; o gate de admin é por rota de API — assim
+    o não-admin ainda usa o bloco 'Minha conta' da mesma página."""
+    if not current_user():
+        return redirect("/login", code=302)
+    return serve_file("admin.html")
+
+
 # ─────────────────────────────────────────────────────────────────────────────
 # Auth API
 # ─────────────────────────────────────────────────────────────────────────────
@@ -623,8 +699,13 @@ def api_me():
     real = s["e"]
     adm = is_admin(real)
     alvo = s.get("v") if (s.get("v") and adm) else None
+    perfil = perfil_de(real)
     return _json({"ok": True, "email": real, "nome": s.get("n"), "is_admin": adm,
-                  "view_as": alvo, "efetivo": alvo or real})
+                  "perfil": perfil, "perfil_label": PERFIL_LABEL.get(perfil, perfil),
+                  # o front usa isto para esconder o que o backend já barraria
+                  "pode_escrever_tasks": perfil != "cliente",
+                  "view_as": alvo, "efetivo": alvo or real,
+                  "perfil_efetivo": perfil_de(alvo) if alvo else perfil})
 
 
 @app.get("/api/usuarios")
@@ -658,6 +739,220 @@ def api_view_as():
                     max_age=SESSION_TTL, httponly=True, secure=True,
                     samesite="Lax", path="/")
     return resp
+
+
+# ─────────────────────────────────────────────────────────────────────────────
+# Administração de acessos — só admin (tela /admin)
+# ─────────────────────────────────────────────────────────────────────────────
+def _norm_email(s):
+    return (s or "").strip().lower()
+
+
+def _usuario(email):
+    return q("""select email, nome, perfil, coalesce(is_admin,false) as is_admin, ativo
+                from cockpit.usuarios_login where lower(email)=%s""",
+             (_norm_email(email),), one=True)
+
+
+@app.get("/api/admin/clientes")
+def api_admin_clientes():
+    """Catálogo COMPLETO de clientes — sem o filtro de acesso, porque é a lista
+    de onde o admin escolhe o que liberar."""
+    if (r := require_admin()):
+        return r
+    rows = q("""select c.customer, c.nome, count(t.uuid_ticket) as n_tickets
+                from cockpit.clientes c
+                left join cockpit.tickets t on t.customer = c.customer
+                group by c.customer, c.nome order by c.nome""")
+    return _json({"ok": True, "clientes": rows})
+
+
+@app.get("/api/admin/usuarios")
+def api_admin_usuarios():
+    """Lista completa para a tela de acessos, já com os clientes liberados."""
+    if (r := require_admin()):
+        return r
+    users = q("""select email, nome, perfil, coalesce(is_admin,false) as is_admin,
+                        ativo, last_login, created_at
+                 from cockpit.usuarios_login
+                 order by (perfil='admin') desc, nome nulls last, email""")
+    libs = q("select email, customer from cockpit.usuario_clientes")
+    por_email = {}
+    for l in libs:
+        por_email.setdefault(_norm_email(l["email"]), []).append(l["customer"])
+    for u in users:
+        u["clientes"] = sorted(por_email.get(_norm_email(u["email"]), []))
+        u["perfil_label"] = PERFIL_LABEL.get(u["perfil"], u["perfil"])
+    return _json({"ok": True, "usuarios": users, "eu": current_user()})
+
+
+@app.post("/api/admin/usuarios")
+def api_admin_usuario_salvar():
+    """Cria ou edita um usuário. Body: {email, nome, perfil, senha?, ativo?}.
+    A senha só é exigida na criação; se vier na edição, redefine."""
+    if (r := require_admin()):
+        return r
+    if (sim := deny_simulacao()):
+        return sim
+    body = request.get_json(silent=True) or {}
+    email = _norm_email(body.get("email"))
+    if not email or "@" not in email:
+        return _err(400, "Informe um e-mail válido.")
+    nome = (body.get("nome") or "").strip() or email.split("@")[0]
+    perfil = (body.get("perfil") or "comum").strip().lower()
+    if perfil not in PERFIS:
+        return _err(400, f"Perfil inválido. Use: {', '.join(PERFIS)}.")
+    senha = body.get("senha") or ""
+    existente = _usuario(email)
+
+    if not existente and not senha:
+        return _err(400, "Defina uma senha inicial para o novo usuário.")
+    if senha and (msg := valida_senha(senha)):
+        return _err(400, msg)
+
+    # Auto-proteção: o admin não se rebaixa nem se inativa pela própria tela.
+    ativo = body.get("ativo")
+    ativo = True if ativo is None else bool(ativo)
+    if existente and email == _norm_email(current_user()):
+        if perfil != "admin":
+            return _err(400, "Você não pode tirar o seu próprio acesso de administrador.")
+        if not ativo:
+            return _err(400, "Você não pode inativar o seu próprio usuário.")
+
+    if existente:
+        if senha:
+            execute("""update cockpit.usuarios_login
+                          set nome=%s, perfil=%s, ativo=%s, senha_hash=%s
+                        where lower(email)=%s""",
+                    (nome, perfil, ativo, hash_scrypt(senha), email))
+        else:
+            execute("""update cockpit.usuarios_login
+                          set nome=%s, perfil=%s, ativo=%s where lower(email)=%s""",
+                    (nome, perfil, ativo, email))
+        acao = "atualizado"
+    else:
+        execute("""insert into cockpit.usuarios_login
+                     (email, nome, perfil, ativo, senha_hash, created_by)
+                   values (%s,%s,%s,%s,%s,%s)""",
+                (email, nome, perfil, ativo, hash_scrypt(senha), current_user()))
+        acao = "criado"
+    return _json({"ok": True, "acao": acao, "usuario": _usuario(email)})
+
+
+@app.post("/api/admin/usuarios/<path:email>/ativo")
+def api_admin_usuario_ativo(email):
+    """Ativa/inativa. Body: {ativo:true|false}."""
+    if (r := require_admin()):
+        return r
+    if (sim := deny_simulacao()):
+        return sim
+    email = _norm_email(email)
+    if not _usuario(email):
+        return _err(404, "Usuário não encontrado.")
+    ativo = bool((request.get_json(silent=True) or {}).get("ativo"))
+    if email == _norm_email(current_user()) and not ativo:
+        return _err(400, "Você não pode inativar o seu próprio usuário.")
+    execute("update cockpit.usuarios_login set ativo=%s where lower(email)=%s",
+            (ativo, email))
+    return _json({"ok": True, "usuario": _usuario(email)})
+
+
+@app.post("/api/admin/usuarios/<path:email>/perfil")
+def api_admin_usuario_perfil(email):
+    """Troca o perfil. Body: {perfil:'admin'|'comum'|'cliente'}. O trigger do
+    banco mantém o is_admin coerente (o cockpit Next.js ainda lê essa coluna)."""
+    if (r := require_admin()):
+        return r
+    if (sim := deny_simulacao()):
+        return sim
+    email = _norm_email(email)
+    if not _usuario(email):
+        return _err(404, "Usuário não encontrado.")
+    perfil = (request.get_json(silent=True) or {}).get("perfil", "")
+    perfil = str(perfil).strip().lower()
+    if perfil not in PERFIS:
+        return _err(400, f"Perfil inválido. Use: {', '.join(PERFIS)}.")
+    if email == _norm_email(current_user()) and perfil != "admin":
+        return _err(400, "Você não pode tirar o seu próprio acesso de administrador.")
+    execute("update cockpit.usuarios_login set perfil=%s where lower(email)=%s",
+            (perfil, email))
+    return _json({"ok": True, "usuario": _usuario(email)})
+
+
+@app.post("/api/admin/usuarios/<path:email>/senha")
+def api_admin_usuario_senha(email):
+    """Admin redefine a senha de alguém. Body: {senha}."""
+    if (r := require_admin()):
+        return r
+    if (sim := deny_simulacao()):
+        return sim
+    email = _norm_email(email)
+    if not _usuario(email):
+        return _err(404, "Usuário não encontrado.")
+    senha = (request.get_json(silent=True) or {}).get("senha") or ""
+    if (msg := valida_senha(senha)):
+        return _err(400, msg)
+    execute("update cockpit.usuarios_login set senha_hash=%s where lower(email)=%s",
+            (hash_scrypt(senha), email))
+    return _json({"ok": True})
+
+
+@app.post("/api/admin/usuarios/<path:email>/clientes")
+def api_admin_usuario_clientes(email):
+    """Substitui a lista de clientes liberados. Body: {customers:[...]}.
+    Admin ignora a lista (vê tudo), mas guardamos assim mesmo — se ele virar
+    'comum' amanhã, a liberação já está lá."""
+    if (r := require_admin()):
+        return r
+    if (sim := deny_simulacao()):
+        return sim
+    email = _norm_email(email)
+    u = _usuario(email)
+    if not u:
+        return _err(404, "Usuário não encontrado.")
+    body = request.get_json(silent=True) or {}
+    pedidos = body.get("customers")
+    if not isinstance(pedidos, list):
+        return _err(400, "Envie 'customers' como lista.")
+    validos = {r["customer"] for r in q("select customer from cockpit.clientes")}
+    escolhidos = sorted({str(c).strip() for c in pedidos if str(c).strip() in validos})
+    with db() as conn:
+        with conn.cursor() as cur:
+            cur.execute("delete from cockpit.usuario_clientes where lower(email)=%s",
+                        (email,))
+            if escolhidos:
+                psycopg2.extras.execute_values(
+                    cur, """insert into cockpit.usuario_clientes
+                              (email, customer, created_by) values %s
+                            on conflict (email, customer) do nothing""",
+                    [(u["email"], c, current_user()) for c in escolhidos])
+    return _json({"ok": True, "email": u["email"], "clientes": escolhidos,
+                  "total": len(escolhidos)})
+
+
+@app.post("/api/conta/senha")
+def api_conta_senha():
+    """O próprio usuário troca a senha. Body: {atual, nova}."""
+    if (r := require_auth()):
+        return r
+    if (sim := deny_simulacao()):
+        return sim
+    body = request.get_json(silent=True) or {}
+    atual, nova = body.get("atual") or "", body.get("nova") or ""
+    email = current_user()
+    row = q("select email, senha_hash from cockpit.usuarios_login where lower(email)=%s",
+            (_norm_email(email),), one=True)
+    if not row:
+        return _err(404, "Usuário não encontrado.")
+    if not verify_scrypt(row["senha_hash"], atual):
+        return _err(401, "A senha atual não confere.")
+    if (msg := valida_senha(nova)):
+        return _err(400, msg)
+    if verify_scrypt(row["senha_hash"], nova):
+        return _err(400, "A nova senha é igual à atual.")
+    execute("update cockpit.usuarios_login set senha_hash=%s where email=%s",
+            (hash_scrypt(nova), row["email"]))
+    return _json({"ok": True})
 
 
 @app.errorhandler(Exception)
@@ -1028,8 +1323,14 @@ def api_ticket_decidir(uuid):
           classe=coalesce(excluded.classe, cockpit.decisoes.classe),
           decided_by=excluded.decided_by, updated_at=now()
     """, (uuid.upper(), dec_db, est, body.get("nota"), body.get("classe"), current_user()))
-    # auto-tag no Tasks SC
+    # Auto-tag no Tasks SC. O perfil 'cliente' decide (a decisão acima já está
+    # gravada no Supabase), mas não carimba tag na Task — por isso a auto-tag é
+    # pulada em vez de a rota inteira ser barrada.
     tag_aplicada = None
+    if perfil_de(current_user()) == "cliente":
+        return _json({"ok": True, "uuid": uuid, "decisao": dec_ui, "tag": None,
+                      "aviso": "Decisão gravada. A tag no Tasks SC não foi aplicada "
+                               "porque o seu perfil (Cliente) não altera o Tasks SC."})
     if body.get("aplicar_tag", True) and dec_ui:
         mp = _decisao_tags_map()
         tag = mp.get(dec_ui)
@@ -1150,6 +1451,8 @@ def api_tags_sync():
     raramente, então isso roda de vez em quando (ou por cron)."""
     if (r := require_auth()):
         return r
+    if (w := require_tasks_write()):
+        return w
     if (sim := deny_simulacao()):
         return sim
     page = int(request.args.get("page", 1))
@@ -1220,6 +1523,8 @@ def _resync_tags(uuid):
 def api_ticket_update(uuid):
     if (r := require_auth()):
         return r
+    if (w := require_tasks_write()):
+        return w
     if (sim := deny_simulacao()):
         return sim
     if (g := deny_uuid(uuid)):
@@ -1248,6 +1553,8 @@ def api_ticket_update(uuid):
 def api_ticket_history_post(uuid):
     if (r := require_auth()):
         return r
+    if (w := require_tasks_write()):
+        return w
     if (sim := deny_simulacao()):
         return sim
     if (g := deny_uuid(uuid)):
@@ -1320,6 +1627,8 @@ def api_refresh():
     """
     if (r := require_auth()):
         return r
+    if (w := require_tasks_write()):
+        return w
     if (sim := deny_simulacao()):
         return sim
     chave = request.args.get("cliente", "DIGITRO")
@@ -1350,6 +1659,8 @@ def api_gmail_health():
 def api_gmail_draft():
     if (r := require_auth()):
         return r
+    if (w := require_tasks_write()):
+        return w
     if (sim := deny_simulacao()):
         return sim
     body = request.get_json(silent=True) or {}

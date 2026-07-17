@@ -217,6 +217,10 @@ footer b{color:var(--navy)}
   <span id="lblAtualizado" style="font-size:11px;opacity:.7"></span>
   <a class="btn btn-roxo" href="/gaps-reuniao.html" style="text-decoration:none" title="Tela de reunião de decisão com o cliente">🤝 Reunião de decisão</a>
   <button class="btn btn-ghost" id="btnRefresh" title="Rebusca os tickets na API Tasks SC (roda clientes.py)">⟳ Atualizar dados</button>
+  <a class="btn btn-ghost" id="btnAcessos" href="/admin" style="text-decoration:none;display:none"
+     title="Cadastrar usuários, definir perfis e liberar clientes">⚙ Acessos</a>
+  <a class="btn btn-ghost" id="btnConta" href="/admin" style="text-decoration:none"
+     title="Minha conta — trocar senha">🔑</a>
 </header>
 
 <div class="kpis" id="kpis"></div>
@@ -1031,12 +1035,23 @@ async function initViewAs(){
   let me; try{ me = await api("/api/me"); }catch(_){ return; }
   const sel = document.getElementById("viewAs");
   const faixa = document.getElementById("simFaixa");
+  document.getElementById("btnConta").title = `${me.nome||me.email} · ${me.perfil_label||""} — minha conta`;
+  // Perfil "cliente": consulta e decide, mas o backend recusa escrita no Tasks SC
+  // (HTTP 403). Avisamos aqui para o erro não chegar como surpresa no Salvar.
+  if(me.perfil === "cliente"){
+    faixa.classList.add("on");
+    document.getElementById("simTxt").textContent =
+      "Perfil Cliente — você pode consultar e decidir/estimar. Alterações na Task, tags e ocorrências estão bloqueadas.";
+    faixa.querySelector("button").style.display = "none";
+  }
   if(me.view_as){
     faixa.classList.add("on");
     document.getElementById("simTxt").textContent =
       `Vendo como ${me.view_as} — esta é a visão DELE. Gravações estão bloqueadas.`;
+    faixa.querySelector("button").style.display = "";
   }
   if(!me.is_admin) return;
+  document.getElementById("btnAcessos").style.display = "";
   try{
     const {usuarios} = await api("/api/usuarios");
     sel.classList.remove("hide");

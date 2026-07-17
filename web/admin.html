@@ -1,0 +1,486 @@
+<!DOCTYPE html>
+<html lang="pt-BR">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Acessos · Gaps — TOTVS SC</title>
+<style>
+:root{
+  --navy:#0C2340; --roxo:#6F5BFF; --lilas:#E8E5FF; --cinza:#F4F4F8;
+  --ok:#1E9E6A; --warn:#E8A33D; --danger:#D64550; --ink:#2A2A35; --muted:#7A7A8C;
+}
+*{box-sizing:border-box;margin:0;padding:0}
+body{font-family:-apple-system,"Segoe UI",Arial,sans-serif;background:var(--cinza);color:var(--ink);font-size:14px}
+button{font-family:inherit;cursor:pointer}
+input,select,textarea{font-family:inherit;font-size:13px}
+a{color:var(--roxo)}
+
+header{background:var(--navy);color:#fff;padding:12px 20px;display:flex;align-items:center;gap:16px;flex-wrap:wrap;position:sticky;top:0;z-index:40}
+header .brand{font-weight:700;letter-spacing:.4px;font-size:15px}
+header .brand small{display:block;font-weight:400;font-size:11px;opacity:.75;letter-spacing:1.2px}
+.btn{border:none;border-radius:8px;padding:8px 14px;font-weight:600;font-size:13px}
+.btn-roxo{background:var(--roxo);color:#fff}
+.btn-roxo:hover{filter:brightness(1.1)}
+.btn-ghost{background:transparent;color:#fff;border:1px solid #3A5578}
+.btn-mini{border:1px solid #D8D8E4;background:#fff;border-radius:7px;padding:5px 10px;font-size:11.5px;font-weight:700;color:var(--ink)}
+.btn-mini:hover{border-color:var(--roxo);color:var(--roxo)}
+.btn-mini.danger:hover{border-color:var(--danger);color:var(--danger)}
+.btn:disabled,.btn-mini:disabled{opacity:.5;cursor:not-allowed}
+.spacer{flex:1}
+
+.wrap{max-width:1180px;margin:0 auto;padding:18px 20px 40px}
+.card{background:#fff;border-radius:12px;box-shadow:0 1px 3px rgba(12,35,64,.08);margin-bottom:16px}
+.card h2{font-size:14px;padding:14px 18px;border-bottom:1px solid #EDEDF3;display:flex;align-items:center;gap:9px}
+.card h2 small{font-weight:400;color:var(--muted);font-size:11.5px}
+.card .body{padding:16px 18px}
+
+.aviso{background:#FFF3DD;color:#4A3200;border-radius:10px;padding:12px 16px;font-size:12.5px;margin-bottom:16px;line-height:1.55}
+.aviso b{display:block;margin-bottom:3px}
+
+table{width:100%;border-collapse:collapse}
+th{text-align:left;font-size:10.5px;text-transform:uppercase;letter-spacing:.6px;color:var(--muted);padding:9px 10px;border-bottom:1px solid #EDEDF3}
+td{padding:10px;border-bottom:1px solid #F2F2F7;vertical-align:middle;font-size:13px}
+tr.inativo td{opacity:.5}
+td .em{font-size:11.5px;color:var(--muted)}
+.pill{font-size:10px;font-weight:800;border-radius:20px;padding:3px 10px;display:inline-block}
+.pill.admin{background:var(--lilas);color:var(--roxo)}
+.pill.comum{background:#E2F5EC;color:var(--ok)}
+.pill.cliente{background:#EAF8FC;color:#0077A3}
+.pill.off{background:#FBEAEA;color:var(--danger)}
+.nclis{font-weight:700}
+.nclis.zero{color:var(--danger)}
+.acoes{display:flex;gap:6px;justify-content:flex-end;flex-wrap:wrap}
+
+.grid{display:grid;grid-template-columns:repeat(auto-fit,minmax(200px,1fr));gap:12px}
+label.f{display:block;font-size:11px;font-weight:700;color:var(--muted);text-transform:uppercase;letter-spacing:.5px;margin-bottom:5px}
+input[type=text],input[type=email],input[type=password],select{
+  width:100%;border:1px solid #D8D8E4;border-radius:8px;padding:9px 10px;background:#fff}
+input:focus,select:focus{outline:none;border-color:var(--roxo)}
+.hint{font-size:11.5px;color:var(--muted);margin-top:5px;line-height:1.5}
+
+/* modal */
+.ovl{display:none;position:fixed;inset:0;background:rgba(12,35,64,.45);z-index:60;align-items:center;justify-content:center;padding:20px}
+.ovl.on{display:flex}
+.modal{background:#fff;border-radius:14px;width:100%;max-width:640px;max-height:88vh;display:flex;flex-direction:column}
+.modal h3{font-size:15px;padding:16px 18px;border-bottom:1px solid #EDEDF3;display:flex;align-items:center;gap:8px}
+.modal h3 .x{margin-left:auto;background:none;border:0;font-size:20px;color:var(--muted);line-height:1}
+.modal .mbody{padding:16px 18px;overflow:auto}
+.modal .mfoot{padding:12px 18px;border-top:1px solid #EDEDF3;display:flex;gap:8px;align-items:center}
+
+.chk{display:flex;align-items:center;gap:9px;padding:7px 9px;border-radius:8px;font-size:12.5px}
+.chk:hover{background:var(--cinza)}
+.chk input{width:15px;height:15px;accent-color:var(--roxo);flex:none}
+.chk .nm{flex:1}
+.chk .cd{font-size:10.5px;color:var(--muted);font-family:ui-monospace,Menlo,monospace}
+.chklist{border:1px solid #EDEDF3;border-radius:10px;max-height:340px;overflow:auto;padding:4px}
+
+.toast{position:fixed;bottom:22px;left:50%;transform:translateX(-50%);background:var(--navy);color:#fff;border-radius:10px;padding:11px 22px;font-weight:600;z-index:99;opacity:0;transition:opacity .25s;pointer-events:none;max-width:80vw;text-align:center}
+.toast.show{opacity:1}
+.toast.ok{background:var(--ok)} .toast.err{background:var(--danger)}
+.loading{color:var(--muted);font-size:12.5px;padding:12px}
+.hide{display:none !important}
+footer{padding:18px;text-align:center;color:var(--muted);font-size:11px}
+</style>
+</head>
+<body>
+
+<header>
+  <div class="brand">TOTVS · SANTA CATARINA<small>CONTROLE DE ACESSO — USUÁRIOS, PERFIS E CLIENTES</small></div>
+  <div class="spacer"></div>
+  <span id="lblEu" style="font-size:11.5px;opacity:.8"></span>
+  <a class="btn btn-ghost" href="/gaps-decisao.html" style="text-decoration:none">← Voltar ao board</a>
+  <button class="btn btn-ghost" id="btnSair">Sair</button>
+</header>
+
+<div class="wrap">
+
+  <!-- ════ Usuários (só admin) ════ -->
+  <div id="secAdmin" class="hide">
+    <div class="aviso">
+      <b>Como o acesso funciona</b>
+      <b style="font-weight:400;display:block">
+      <span class="pill admin">ADMIN</span> vê todos os clientes e administra esta tela ·
+      <span class="pill comum">COMUM</span> só os clientes liberados, mas edita Task, tags, ocorrências e decisões neles ·
+      <span class="pill cliente">CLIENTE</span> só os clientes liberados; consulta e decide/estima, mas não altera nada no Tasks SC.
+      </b>
+      <span style="display:block;margin-top:6px">Modo estrito: <b>usuário sem nenhum cliente marcado não vê nada</b> — nem o cliente na lista, nem os GAPs.</span>
+    </div>
+
+    <div class="card">
+      <h2>➕ Novo usuário <small>o e-mail é o login; a senha é gravada com hash scrypt</small></h2>
+      <div class="body">
+        <div class="grid">
+          <div>
+            <label class="f" for="nEmail">E-mail</label>
+            <input type="email" id="nEmail" placeholder="nome.sobrenome@totvs.com.br" autocomplete="off">
+          </div>
+          <div>
+            <label class="f" for="nNome">Nome</label>
+            <input type="text" id="nNome" placeholder="Nome Sobrenome" autocomplete="off">
+          </div>
+          <div>
+            <label class="f" for="nPerfil">Perfil de acesso</label>
+            <select id="nPerfil">
+              <option value="comum">Comum — edita os clientes liberados</option>
+              <option value="cliente">Cliente — consulta e decide, não altera o Tasks SC</option>
+              <option value="admin">Administrador — vê tudo e gere acessos</option>
+            </select>
+          </div>
+          <div>
+            <label class="f" for="nSenha">Senha inicial</label>
+            <input type="password" id="nSenha" placeholder="mínimo 8 caracteres" autocomplete="new-password">
+          </div>
+        </div>
+        <div style="display:flex;align-items:center;gap:12px;margin-top:12px">
+          <button class="btn btn-roxo" id="btnCriar">Criar usuário</button>
+          <span class="hint" style="margin:0">Depois de criar, use <b>Clientes</b> na linha do usuário para liberar o que ele enxerga.</span>
+        </div>
+      </div>
+    </div>
+
+    <div class="card">
+      <h2>👥 Usuários <small id="lblTot"></small></h2>
+      <div class="body" style="padding:0 6px 6px">
+        <table>
+          <thead><tr>
+            <th style="width:34%">Usuário</th><th style="width:16%">Perfil</th>
+            <th style="width:11%">Clientes</th><th style="width:9%">Situação</th>
+            <th style="width:14%">Último acesso</th><th></th>
+          </tr></thead>
+          <tbody id="tbUsers"><tr><td colspan="6" class="loading">Carregando…</td></tr></tbody>
+        </table>
+      </div>
+    </div>
+  </div>
+
+  <!-- ════ Minha conta (todos) ════ -->
+  <div class="card">
+    <h2>🔑 Minha conta <small>trocar a própria senha</small></h2>
+    <div class="body">
+      <div class="grid" style="max-width:640px">
+        <div>
+          <label class="f" for="sAtual">Senha atual</label>
+          <input type="password" id="sAtual" autocomplete="current-password">
+        </div>
+        <div>
+          <label class="f" for="sNova">Nova senha</label>
+          <input type="password" id="sNova" placeholder="mínimo 8 caracteres" autocomplete="new-password">
+        </div>
+        <div>
+          <label class="f" for="sNova2">Repetir a nova senha</label>
+          <input type="password" id="sNova2" autocomplete="new-password">
+        </div>
+      </div>
+      <button class="btn btn-roxo" id="btnTrocar" style="margin-top:12px">Trocar minha senha</button>
+      <p class="hint" id="hintPerfil"></p>
+    </div>
+  </div>
+</div>
+
+<!-- ════ Modal: clientes autorizados ════ -->
+<div class="ovl" id="ovlCli">
+  <div class="modal">
+    <h3>🏢 Clientes autorizados — <span id="cliQuem"></span>
+      <button class="x" onclick="fecharCli()">×</button></h3>
+    <div class="mbody">
+      <div id="cliAvisoAdmin" class="aviso hide" style="margin-bottom:12px">
+        <b>Este usuário é administrador</b>
+        Admin enxerga <b>todos</b> os clientes — esta lista fica guardada e passa a valer se o perfil virar Comum ou Cliente.
+      </div>
+      <div style="display:flex;gap:8px;margin-bottom:10px">
+        <input type="text" id="cliBusca" placeholder="🔎 Filtrar cliente por nome ou código" style="flex:1">
+        <button class="btn-mini" onclick="marcarTodos(true)">Marcar todos</button>
+        <button class="btn-mini" onclick="marcarTodos(false)">Limpar</button>
+      </div>
+      <div class="chklist" id="cliLista"></div>
+    </div>
+    <div class="mfoot">
+      <span class="hint" id="cliCont" style="margin:0"></span>
+      <div class="spacer" style="flex:1"></div>
+      <button class="btn-mini" onclick="fecharCli()">Cancelar</button>
+      <button class="btn btn-roxo" id="btnSalvarCli">Salvar liberação</button>
+    </div>
+  </div>
+</div>
+
+<!-- ════ Modal: editar usuário ════ -->
+<div class="ovl" id="ovlEdit">
+  <div class="modal" style="max-width:520px">
+    <h3>✏️ Editar usuário <button class="x" onclick="fecharEdit()">×</button></h3>
+    <div class="mbody">
+      <div style="margin-bottom:12px"><b id="eEmail" style="font-size:13px"></b></div>
+      <div class="grid">
+        <div>
+          <label class="f" for="eNome">Nome</label>
+          <input type="text" id="eNome">
+        </div>
+        <div>
+          <label class="f" for="ePerfil">Perfil de acesso</label>
+          <select id="ePerfil">
+            <option value="comum">Comum</option>
+            <option value="cliente">Cliente</option>
+            <option value="admin">Administrador</option>
+          </select>
+        </div>
+      </div>
+      <div style="margin-top:12px">
+        <label class="f" for="eSenha">Redefinir senha <span style="text-transform:none;font-weight:400">(deixe vazio para manter)</span></label>
+        <input type="password" id="eSenha" placeholder="nova senha — mínimo 8 caracteres" autocomplete="new-password">
+      </div>
+      <p class="hint" id="eHint"></p>
+    </div>
+    <div class="mfoot">
+      <div class="spacer" style="flex:1"></div>
+      <button class="btn-mini" onclick="fecharEdit()">Cancelar</button>
+      <button class="btn btn-roxo" id="btnSalvarEdit">Salvar</button>
+    </div>
+  </div>
+</div>
+
+<div class="toast" id="toast"></div>
+<footer>Gaps · Controle de Acesso — TOTVS Santa Catarina · dados em <b>cockpit.usuarios_login</b> / <b>cockpit.usuario_clientes</b></footer>
+
+<script>
+/* ════════════════ util ════════════════ */
+const $ = s => document.querySelector(s);
+const esc = s => String(s ?? "").replace(/[&<>"']/g, c =>
+  ({"&":"&amp;","<":"&lt;",">":"&gt;",'"':"&quot;","'":"&#39;"}[c]));
+
+let toastT;
+function toast(msg, kind){
+  const t = $("#toast");
+  t.textContent = msg; t.className = "toast show " + (kind||"");
+  clearTimeout(toastT); toastT = setTimeout(()=>t.className="toast", 4200);
+}
+
+/* Toda chamada passa por aqui: nenhuma rejeição escapa sem virar mensagem
+   legível na tela (erro mudo em tela de admin é o pior dos mundos). */
+async function api(url, opts){
+  let r;
+  try{ r = await fetch(url, Object.assign({credentials:"same-origin"}, opts||{})); }
+  catch(e){ throw new Error("Sem resposta do servidor: " + e.message); }
+  if(r.status === 401){ location.href = "/login"; throw new Error("Sessão expirada."); }
+  let d = null;
+  try{ d = await r.json(); }catch(_){}
+  if(!r.ok || (d && d.ok === false)) throw new Error((d && d.error) || `HTTP ${r.status}`);
+  return d;
+}
+
+const fmtData = s => s ? new Date(s).toLocaleString("pt-BR",
+  {day:"2-digit",month:"2-digit",year:"2-digit",hour:"2-digit",minute:"2-digit"}) : "—";
+
+/* ════════════════ estado ════════════════ */
+let me = null, usuarios = [], clientes = [], cliAtual = null, cliSel = new Set();
+
+/* ════════════════ boot ════════════════ */
+async function init(){
+  try{ me = await api("/api/me"); }catch(_){ return; }
+  $("#lblEu").textContent = `${me.nome || me.email} · ${me.perfil_label || me.perfil}`;
+  $("#hintPerfil").innerHTML = me.is_admin
+    ? "Você é <b>administrador</b>: vê todos os clientes e administra os acessos desta tela."
+    : (me.perfil === "cliente"
+        ? "Seu perfil é <b>Cliente</b>: você consulta os GAPs dos clientes liberados e pode decidir/estimar, mas não altera dados no Tasks SC."
+        : "Seu perfil é <b>Comum</b>: você trabalha normalmente nos clientes liberados para você.");
+  if(me.is_admin){
+    $("#secAdmin").classList.remove("hide");
+    await Promise.all([carregarUsuarios(), carregarClientes()]);
+  }
+}
+
+async function carregarClientes(){
+  try{ clientes = (await api("/api/admin/clientes")).clientes || []; }
+  catch(e){ toast("Falha carregando clientes: " + e.message, "err"); }
+}
+
+async function carregarUsuarios(){
+  try{
+    const d = await api("/api/admin/usuarios");
+    usuarios = d.usuarios || [];
+    renderUsuarios();
+  }catch(e){
+    $("#tbUsers").innerHTML = `<tr><td colspan="6" class="loading">Falha: ${esc(e.message)}</td></tr>`;
+  }
+}
+
+function renderUsuarios(){
+  const eu = (me.email||"").toLowerCase();
+  $("#lblTot").textContent = `${usuarios.length} no total · ${usuarios.filter(u=>u.ativo).length} ativos`;
+  $("#tbUsers").innerHTML = usuarios.map(u=>{
+    const souEu = (u.email||"").toLowerCase() === eu;
+    const nCli  = (u.clientes||[]).length;
+    // Admin vê tudo — contar clientes liberados para ele confundiria.
+    const cel   = u.perfil === "admin"
+      ? `<span class="nclis" title="Administrador vê todos os clientes">todos</span>`
+      : `<span class="nclis ${nCli?"":"zero"}" title="${nCli?esc(u.clientes.join(", ")):"Sem liberação: não vê nenhum GAP"}">${nCli || "nenhum"}</span>`;
+    return `<tr class="${u.ativo?"":"inativo"}">
+      <td><b>${esc(u.nome||u.email)}</b>${souEu?' <span class="em">(você)</span>':""}
+          <div class="em">${esc(u.email)}</div></td>
+      <td><span class="pill ${esc(u.perfil)}">${esc((u.perfil_label||u.perfil).toUpperCase())}</span></td>
+      <td>${cel}</td>
+      <td>${u.ativo?'<span class="pill comum">ATIVO</span>':'<span class="pill off">INATIVO</span>'}</td>
+      <td class="em">${fmtData(u.last_login)}</td>
+      <td><div class="acoes">
+        <button class="btn-mini" onclick="abrirCli('${esc(u.email)}')">Clientes</button>
+        <button class="btn-mini" onclick="abrirEdit('${esc(u.email)}')">Editar</button>
+        <button class="btn-mini ${u.ativo?"danger":""}" ${souEu&&u.ativo?"disabled title='Você não pode inativar o seu próprio usuário'":""}
+          onclick="toggleAtivo('${esc(u.email)}', ${u.ativo?"false":"true"})">${u.ativo?"Inativar":"Reativar"}</button>
+      </div></td></tr>`;
+  }).join("") || `<tr><td colspan="6" class="loading">Nenhum usuário.</td></tr>`;
+}
+
+/* ════════════════ criar ════════════════ */
+$("#btnCriar").onclick = async () => {
+  const b = $("#btnCriar");
+  const body = {
+    email: $("#nEmail").value.trim(),
+    nome:  $("#nNome").value.trim(),
+    perfil:$("#nPerfil").value,
+    senha: $("#nSenha").value,
+  };
+  if(!body.email) return toast("Informe o e-mail.", "err");
+  if(!body.senha) return toast("Defina a senha inicial.", "err");
+  b.disabled = true;
+  try{
+    await api("/api/admin/usuarios", {method:"POST",
+      headers:{"Content-Type":"application/json"}, body: JSON.stringify(body)});
+    $("#nEmail").value = $("#nNome").value = $("#nSenha").value = "";
+    await carregarUsuarios();
+    toast("Usuário criado ✓ — agora libere os clientes dele", "ok");
+  }catch(e){ toast("Falha: " + e.message, "err"); }
+  b.disabled = false;
+};
+
+/* ════════════════ ativar / inativar ════════════════ */
+async function toggleAtivo(email, ativo){
+  try{
+    await api(`/api/admin/usuarios/${encodeURIComponent(email)}/ativo`, {method:"POST",
+      headers:{"Content-Type":"application/json"}, body: JSON.stringify({ativo})});
+    await carregarUsuarios();
+    toast(ativo ? "Usuário reativado ✓" : "Usuário inativado ✓", "ok");
+  }catch(e){ toast("Falha: " + e.message, "err"); }
+}
+
+/* ════════════════ editar ════════════════ */
+let editEmail = null;
+function abrirEdit(email){
+  const u = usuarios.find(x=>x.email===email); if(!u) return;
+  editEmail = email;
+  $("#eEmail").textContent = u.email;
+  $("#eNome").value  = u.nome || "";
+  $("#ePerfil").value = u.perfil;
+  $("#eSenha").value = "";
+  const souEu = (u.email||"").toLowerCase() === (me.email||"").toLowerCase();
+  $("#ePerfil").disabled = souEu;
+  $("#eHint").innerHTML = souEu
+    ? "Você não pode alterar o seu próprio perfil de administrador."
+    : "Trocar o perfil vale na hora — o usuário sente na próxima chamada, sem precisar deslogar.";
+  $("#ovlEdit").classList.add("on");
+}
+function fecharEdit(){ $("#ovlEdit").classList.remove("on"); editEmail = null; }
+
+$("#btnSalvarEdit").onclick = async () => {
+  if(!editEmail) return;
+  const u = usuarios.find(x=>x.email===editEmail);
+  const b = $("#btnSalvarEdit"); b.disabled = true;
+  const body = {email: editEmail, nome: $("#eNome").value.trim(),
+                perfil: $("#ePerfil").disabled ? u.perfil : $("#ePerfil").value,
+                ativo: u.ativo};
+  const senha = $("#eSenha").value;
+  if(senha) body.senha = senha;
+  try{
+    await api("/api/admin/usuarios", {method:"POST",
+      headers:{"Content-Type":"application/json"}, body: JSON.stringify(body)});
+    await carregarUsuarios();
+    fecharEdit();
+    toast(senha ? "Usuário salvo e senha redefinida ✓" : "Usuário salvo ✓", "ok");
+  }catch(e){ toast("Falha: " + e.message, "err"); }
+  b.disabled = false;
+};
+
+/* ════════════════ clientes autorizados ════════════════ */
+function abrirCli(email){
+  const u = usuarios.find(x=>x.email===email); if(!u) return;
+  cliAtual = u;
+  cliSel = new Set(u.clientes || []);
+  $("#cliQuem").textContent = u.nome || u.email;
+  $("#cliAvisoAdmin").classList.toggle("hide", u.perfil !== "admin");
+  $("#cliBusca").value = "";
+  renderCli();
+  $("#ovlCli").classList.add("on");
+}
+function fecharCli(){ $("#ovlCli").classList.remove("on"); cliAtual = null; }
+
+function renderCli(){
+  const f = $("#cliBusca").value.trim().toLowerCase();
+  const vis = clientes.filter(c => !f ||
+    (c.nome||"").toLowerCase().includes(f) || (c.customer||"").toLowerCase().includes(f));
+  $("#cliLista").innerHTML = vis.map(c=>`
+    <label class="chk">
+      <input type="checkbox" value="${esc(c.customer)}" ${cliSel.has(c.customer)?"checked":""}
+             onchange="marcaCli(this)">
+      <span class="nm">${esc(c.nome||"(sem nome)")}</span>
+      <span class="cd">${esc(c.customer)} · ${c.n_tickets||0} tickets</span>
+    </label>`).join("") || `<div class="loading">Nenhum cliente encontrado.</div>`;
+  $("#cliCont").innerHTML = `<b>${cliSel.size}</b> de ${clientes.length} liberados` +
+    (cliSel.size===0 ? ` — <span style="color:var(--danger)">sem liberação ele não vê nada</span>` : "");
+}
+function marcaCli(el){ el.checked ? cliSel.add(el.value) : cliSel.delete(el.value); renderCli(); }
+/* Marcar/Limpar respeita o filtro: age só no que está à vista. */
+function marcarTodos(on){
+  const f = $("#cliBusca").value.trim().toLowerCase();
+  clientes.filter(c => !f || (c.nome||"").toLowerCase().includes(f) ||
+                            (c.customer||"").toLowerCase().includes(f))
+    .forEach(c => on ? cliSel.add(c.customer) : cliSel.delete(c.customer));
+  renderCli();
+}
+$("#cliBusca").oninput = renderCli;
+
+$("#btnSalvarCli").onclick = async () => {
+  if(!cliAtual) return;
+  const b = $("#btnSalvarCli"); b.disabled = true;
+  try{
+    await api(`/api/admin/usuarios/${encodeURIComponent(cliAtual.email)}/clientes`,
+      {method:"POST", headers:{"Content-Type":"application/json"},
+       body: JSON.stringify({customers:[...cliSel]})});
+    await carregarUsuarios();
+    fecharCli();
+    toast("Liberação salva ✓", "ok");
+  }catch(e){ toast("Falha: " + e.message, "err"); }
+  b.disabled = false;
+};
+
+/* ════════════════ minha senha ════════════════ */
+$("#btnTrocar").onclick = async () => {
+  const atual = $("#sAtual").value, nova = $("#sNova").value, nova2 = $("#sNova2").value;
+  if(!atual || !nova) return toast("Preencha a senha atual e a nova.", "err");
+  if(nova !== nova2)  return toast("A nova senha e a repetição não conferem.", "err");
+  if(nova.length < 8) return toast("A nova senha precisa ter ao menos 8 caracteres.", "err");
+  const b = $("#btnTrocar"); b.disabled = true;
+  try{
+    await api("/api/conta/senha", {method:"POST",
+      headers:{"Content-Type":"application/json"}, body: JSON.stringify({atual, nova})});
+    $("#sAtual").value = $("#sNova").value = $("#sNova2").value = "";
+    toast("Senha alterada ✓", "ok");
+  }catch(e){ toast("Falha: " + e.message, "err"); }
+  b.disabled = false;
+};
+
+$("#btnSair").onclick = async () => {
+  try{ await fetch("/api/logout", {method:"POST", credentials:"same-origin"}); }catch(_){}
+  location.href = "/login";
+};
+
+document.addEventListener("keydown", e => {
+  if(e.key === "Escape"){ fecharCli(); fecharEdit(); }
+});
+document.querySelectorAll(".ovl").forEach(o =>
+  o.addEventListener("click", e => { if(e.target === o) o.classList.remove("on"); }));
+
+window.abrirCli = abrirCli; window.fecharCli = fecharCli; window.marcaCli = marcaCli;
+window.marcarTodos = marcarTodos; window.abrirEdit = abrirEdit;
+window.fecharEdit = fecharEdit; window.toggleAtivo = toggleAtivo;
+
+init();
+</script>
+</body>
+</html>
