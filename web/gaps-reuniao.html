@@ -49,7 +49,7 @@ button{font-family:inherit;cursor:pointer}
 .btn-ghost{padding:9px 13px;background:#fff;border:1px solid #DCE3E8;border-radius:9px;font-size:12px;font-weight:500;color:var(--gray)}
 .btn-ghost:hover{border-color:var(--navy);color:var(--navy)}
 
-.container{max-width:1760px;margin:16px auto;padding:0 24px 140px}
+.container{max-width:1760px;margin:16px auto;padding:0 24px 60px}
 .loading{padding:30px;text-align:center;color:var(--gray)}
 
 /* Classification card */
@@ -141,15 +141,21 @@ button{font-family:inherit;cursor:pointer}
 .detail-block .dv.rich [style]{font-size:12.5px!important}
 
 /* FAB */
-.fab-bar{position:fixed;right:16px;top:50%;transform:translateY(-50%);background:var(--navy);color:#fff;border-radius:12px;padding:13px 11px;display:flex;flex-direction:column;gap:7px;align-items:stretch;box-shadow:0 10px 30px rgba(12,35,64,.30);z-index:90;width:172px;max-height:calc(100vh - 140px);overflow-y:auto}
-.fab-bar .fl{font-size:10.5px;color:var(--gray-light);text-transform:uppercase;letter-spacing:.5px;font-weight:700;padding:0 4px;text-align:center}
-.btn-fab{padding:8px 13px;background:rgba(255,255,255,.10);border:1px solid rgba(255,255,255,.14);border-radius:8px;color:#fff;font-size:12px;font-weight:600;display:inline-flex;align-items:center;gap:5px;justify-content:flex-start;width:100%}
-@media(max-width:2200px){.container{padding-right:220px}}
-@media(max-width:900px){
-  .fab-bar{right:auto;top:auto;bottom:16px;left:50%;transform:translateX(-50%);flex-direction:row;flex-wrap:wrap;justify-content:center;align-items:center;width:auto;max-width:calc(100% - 24px);max-height:none;overflow:visible;padding:9px 13px}
-  .btn-fab{width:auto}
-  .container{padding-right:24px}
-}
+/* Menu "Outras ações" — botão no topo + dropdown ancorado nele */
+.acoes-wrap{position:relative;display:flex;align-items:center}
+#btnAcoesMenu{background:rgba(255,255,255,.10);border:1px solid rgba(255,255,255,.18);border-radius:10px;color:#fff;
+  font-family:var(--font);font-size:12px;font-weight:700;padding:9px 13px;display:inline-flex;align-items:center;gap:7px;cursor:pointer;transition:all .15s;white-space:nowrap}
+#btnAcoesMenu:hover{background:rgba(255,255,255,.18)}
+#btnAcoesMenu.open{background:var(--grad);border-color:transparent}
+#btnAcoesMenu .cv{font-size:9px;transition:transform .18s}
+#btnAcoesMenu.open .cv{transform:rotate(180deg)}
+.fab-bar{position:absolute;top:calc(100% + 9px);right:0;background:var(--navy);color:#fff;border:1px solid rgba(255,255,255,.14);border-radius:12px;padding:11px 10px;
+  display:none;flex-direction:column;gap:6px;align-items:stretch;box-shadow:0 14px 38px rgba(12,35,64,.45);z-index:150;width:196px}
+.fab-bar.open{display:flex}
+.fab-bar .fl{font-size:10px;color:var(--gray-light);text-transform:uppercase;letter-spacing:.5px;font-weight:700;padding:0 4px}
+.fab-bar .fl-row{display:flex;align-items:center;justify-content:space-between;gap:6px;padding:0 3px 7px;margin-bottom:2px;border-bottom:1px solid rgba(255,255,255,.12)}
+.btn-fab{padding:8px 11px;background:rgba(255,255,255,.08);border:1px solid rgba(255,255,255,.12);border-radius:8px;color:#fff;font-size:12px;font-weight:600;display:inline-flex;align-items:center;gap:7px;justify-content:flex-start;width:100%;cursor:pointer}
+@media(max-width:768px){.fab-bar{right:auto;left:0;width:min(196px,calc(100vw - 32px))}}
 .btn-fab:hover{background:rgba(255,255,255,.18)}
 .btn-fab.primary{background:var(--grad);border-color:transparent} .btn-fab.primary:hover{filter:brightness(1.1)}
 .btn-fab.danger{background:transparent;border-color:rgba(255,122,136,.4);color:#FF9AA6}
@@ -158,7 +164,7 @@ button{font-family:inherit;cursor:pointer}
 .empty-state{padding:40px 20px;text-align:center;color:var(--gray);background:#fff;border-radius:14px;border:2px dashed #DCE3E8;margin-top:18px}
 .empty-state .ic{font-size:30px;margin-bottom:8px;opacity:.5}
 .empty-state .h{font-size:14px;font-weight:700;color:var(--navy);margin-bottom:3px}
-.toast{position:fixed;bottom:84px;left:50%;transform:translateX(-50%) translateY(20px);background:var(--navy);color:#fff;padding:11px 18px;border-radius:9px;font-size:13px;font-weight:600;opacity:0;pointer-events:none;transition:all .25s;z-index:200;box-shadow:0 6px 20px rgba(12,35,64,.30)}
+.toast{position:fixed;bottom:28px;left:50%;transform:translateX(-50%) translateY(20px);background:var(--navy);color:#fff;padding:11px 18px;border-radius:9px;font-size:13px;font-weight:600;opacity:0;pointer-events:none;transition:all .25s;z-index:200;box-shadow:0 6px 20px rgba(12,35,64,.30)}
 .toast.show{opacity:1;transform:translateX(-50%) translateY(0)}
 .toast.approve{background:var(--approve)} .toast.phase2{background:var(--phase2)}
 .toast.workaround{background:var(--workaround)} .toast.refuse{background:var(--refuse)}
@@ -202,6 +208,20 @@ body.so-leitura input[data-est]{pointer-events:none;opacity:.6}
       <div class="kpi-pill refuse" data-filter="refuse"><span class="lbl">❌ Recusado</span><span class="val"><span id="kRefuseHrs">0</span><span class="u">h</span></span><span class="pct"><span id="kRefuseCount">0</span> · <span id="kRefusePct">0%</span></span></div>
       <div class="kpi-pill pending" data-filter="pending"><span class="lbl">⏳ Pendente</span><span class="val"><span id="kPendingHrs">0</span><span class="u">h</span></span><span class="pct"><span id="kPendingCount">0</span> · <span id="kPendingPct">100%</span></span></div>
     </div>
+    <div class="acoes-wrap">
+      <button id="btnAcoesMenu" type="button" aria-haspopup="true" aria-expanded="false">⚙ Outras ações <span class="cv">▼</span></button>
+
+      <div class="fab-bar" id="fabBar">
+        <div class="fl-row"><span class="fl">Filtro:</span><span id="filterLabel" class="fl" style="color:#fff">Todos</span></div>
+        <button class="btn-fab primary" id="btnSave">💾 Salvar (local)</button>
+        <button class="btn-fab" id="btnReload">↻ Recarregar</button>
+        <button class="btn-fab" id="btnCSV">📊 CSV</button>
+        <button class="btn-fab" id="btnJSON">⬇ JSON</button>
+        <button class="btn-fab" id="btnPrint">🖨️ PDF</button>
+        <button class="btn-fab" id="btnSummary">📋 Resumo</button>
+        <button class="btn-fab danger" id="btnReset">↺ Limpar</button>
+      </div>
+    </div>
   </div>
   <div class="tb-progress"><div class="fill" id="progressFill" style="width:0%"></div></div>
 </header>
@@ -225,18 +245,6 @@ body.so-leitura input[data-est]{pointer-events:none;opacity:.6}
 </div>
 
 <div class="container" id="main"><div class="loading">Carregando GAPs…</div></div>
-
-<div class="fab-bar">
-  <span class="fl">Filtro:</span>
-  <span id="filterLabel" class="fl" style="color:#fff">Todos</span>
-  <button class="btn-fab primary" id="btnSave">💾 Salvar (local)</button>
-  <button class="btn-fab" id="btnReload">↻ Recarregar</button>
-  <button class="btn-fab" id="btnCSV">📊 CSV</button>
-  <button class="btn-fab" id="btnJSON">⬇ JSON</button>
-  <button class="btn-fab" id="btnPrint">🖨️ PDF</button>
-  <button class="btn-fab" id="btnSummary">📋 Resumo</button>
-  <button class="btn-fab danger" id="btnReset">↺ Limpar</button>
-</div>
 
 <div class="toast" id="toast"></div>
 
@@ -632,6 +640,15 @@ $("#btnCSV").onclick=exportCSV; $("#btnJSON").onclick=exportJSON;
 $("#btnPrint").onclick=()=>{ $$(".classif,.group").forEach(x=>x.classList.add("open")); setTimeout(()=>window.print(),200); };
 $("#btnSummary").onclick=summary;
 $("#btnReset").onclick=()=>{ if(!confirm("Limpar TODAS as decisões deste cliente? (não salva até clicar em Salvar)"))return; decisions={}; render(); markDirty(); };
+/* menu "Outras ações": abre/fecha, fecha ao clicar numa opção, fora ou com Esc */
+(function(){
+  const btn=$("#btnAcoesMenu"), bar=$("#fabBar");
+  const setOpen=on=>{ bar.classList.toggle("open",on); btn.classList.toggle("open",on); btn.setAttribute("aria-expanded",on?"true":"false"); };
+  btn.onclick=e=>{ e.stopPropagation(); setOpen(!bar.classList.contains("open")); };
+  bar.addEventListener("click",e=>{ if(e.target.closest(".btn-fab")) setOpen(false); });
+  document.addEventListener("click",e=>{ if(!e.target.closest(".acoes-wrap")) setOpen(false); });
+  document.addEventListener("keydown",e=>{ if(e.key==="Escape") setOpen(false); });
+})();
 $("#kpis").addEventListener("click",e=>{ const p=e.target.closest(".kpi-pill"); if(!p)return; const f=p.dataset.filter; currentFilter=(currentFilter===f&&f!=="all")?"all":f; $$(".kpi-pill").forEach(x=>x.classList.toggle("active", x.dataset.filter===currentFilter&&currentFilter!=="all")); applyFilter(); });
 window.addEventListener("beforeunload",e=>{ if(dirty){ e.preventDefault(); e.returnValue=""; } });
 
