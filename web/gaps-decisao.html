@@ -43,6 +43,7 @@ header input::placeholder{color:#9FB2CC}
 .chip.cls.on{border-color:var(--navy);background:var(--navy);color:#fff}
 .chip[data-onlysemest].on{border-color:var(--danger);background:#FBEAEA;color:var(--danger)}
 .chip[data-onlypendcons].on{border-color:#A06B00;background:#FFF3DD;color:#A06B00}
+.chip[data-onlygapimplant].on{border-color:#B23B3B;background:#FDE2E2;color:#B23B3B}
 .tagfilter{position:relative;display:inline-block}
 .tagfilter #tagFilterCount{background:var(--roxo);color:#fff;border-radius:9px;padding:0 6px;font-size:10px;margin-left:2px}
 .tagfilter-pop{display:none;position:absolute;top:calc(100% + 6px);left:0;z-index:45;background:#fff;border:1px solid #D8D8E4;border-radius:10px;box-shadow:0 8px 28px rgba(12,35,64,.18);width:280px;padding:10px}
@@ -88,6 +89,7 @@ header input::placeholder{color:#9FB2CC}
 .bdg.doc{background:#FFF3DD;color:#A06B00}
 .bdg.cls{background:var(--cinza);color:var(--muted)}
 .bdg.stat{background:#E6EDF7;color:var(--navy)}
+.bdg.confl{background:#FDE2E2;color:#B23B3B}
 .ctags{display:flex;gap:4px;flex-wrap:wrap;margin-top:6px}
 .ctag{font-size:9.5px;font-weight:700;background:#EEF0FA;color:#5B5B86;border-radius:5px;padding:2px 6px;letter-spacing:.2px}
 
@@ -263,6 +265,7 @@ body.so-leitura #btnAddTag{display:none}
   <button class="chip" id="chipPendCons" data-onlypendcons>⏸ Pendente Consultoria</button>
   <button class="chip" id="chipRestTec" data-onlyresttec>🔧 Restrição Técnica</button>
   <button class="chip" id="chipSemEst" data-onlysemest>⏱ Sem estimativa</button>
+  <button class="chip" id="chipGapImplant" data-onlygapimplant title="GAP que também tem a tag IMPLANTAÇÃO — surgiu durante a implantação, possível conflito RFP × GAP">🧩 GAP + Implantação</button>
   <label><input type="checkbox" id="chkClosed"> mostrar resolvidos/cancelados</label>
 </div>
 
@@ -324,7 +327,12 @@ let histCache = {};        // uuid → items
 let tagCatalog = [];       // [{id,tag}]
 let etapasOn = new Set(ETAPAS);
 let clsOn = new Set();     // vazio = todas
-let busca = "", showClosed = false, onlySemEst = false, onlyPendCons = false, onlyRestTec = false;
+let busca = "", showClosed = false, onlySemEst = false, onlyPendCons = false, onlyRestTec = false, onlyGapImplant = false;
+// Conceito "GAP + Implantação": GAP que carrega também a tag IMPLANTAÇÃO —
+// nasceu durante a implantação, então é candidato a conflito RFP × GAP (vendido
+// como nativo/atende na proposta e virou desenvolvimento). Ver
+// Dashboard Serviço × Comercial (svc_comercial) para o conceito irmão.
+const IMPLANT_TAG = "IMPLANTAÇÃO";
 let tagFilterSel = new Set();   // tags selecionadas no filtro múltiplo
 let tagFilterMode = "and";      // "and" = contém todas · "or" = contém qualquer
 const PEND_CONS_TAG = "PENDENCIA CONSULTOR";
@@ -375,6 +383,7 @@ async function loadTickets(){
 /* ════════════════ Classificação dos cards ════════════════ */
 const tagsOf = t => (t.tags||[]).map(x=>String(x).toUpperCase());
 const isFoco = t => tagsOf(t).some(tg=>ETAPAS.includes(tg));
+const isGapImplant = t => tagsOf(t).includes("GAP") && tagsOf(t).includes(IMPLANT_TAG);
 const classeOf = t => CLASSES.find(c=>tagsOf(t).includes(c)) || "";
 function colOf(t){
   const tg = tagsOf(t);
@@ -404,6 +413,7 @@ function visiveis(){
     if(onlySemEst && Number(t.time_estimate)>0) return false;
     if(onlyPendCons && !tagsOf(t).includes(PEND_CONS_TAG)) return false;
     if(onlyRestTec && !tagsOf(t).includes(REST_TEC_TAG)) return false;
+    if(onlyGapImplant && !isGapImplant(t)) return false;
     if(tagFilterSel.size){
       const tg = tagsOf(t);
       const ok = tagFilterMode==="or"
@@ -485,6 +495,7 @@ function cardHtml(t){
       ${cls?`<span class="bdg cls">${cls}</span>`:""}
       ${nlm===undefined?"":(nlm.count>0?`<span class="bdg nlm">📖 NLM ✓</span>`:"")}
       ${docs?`<span class="bdg doc">📄 Drive</span>`:""}
+      ${isGapImplant(t)?`<span class="bdg confl" title="GAP surgido na Implantação — possível conflito RFP × GAP">🧩 RFP×GAP</span>`:""}
     </div>
     ${freeTags.length?`<div class="ctags">${freeTags.map(tg=>`<span class="ctag">${esc(tg)}</span>`).join("")}</div>`:""}
   </div>`;
@@ -1158,6 +1169,7 @@ $("#filters").addEventListener("click", ev=>{
   if(b.hasAttribute("data-onlysemest")) onlySemEst = b.classList.contains("on");
   if(b.hasAttribute("data-onlypendcons")) onlyPendCons = b.classList.contains("on");
   if(b.hasAttribute("data-onlyresttec")) onlyRestTec = b.classList.contains("on");
+  if(b.hasAttribute("data-onlygapimplant")) onlyGapImplant = b.classList.contains("on");
   render();
 });
 
