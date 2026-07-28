@@ -102,6 +102,7 @@ button{font-family:inherit;cursor:pointer}
 .tag-mini.modulo{background:#F0E5FF;color:#6F2BC9}
 .tag-mini.necessidade{background:#FFF3E5;color:#A85A00}
 .tag-mini.nlm{background:#E2F5EC;color:var(--approve)}
+.tag-mini.raw{background:#fff;border:1px solid #D8DEE6;color:#5A6B7B}
 .task-hours{text-align:right;min-width:60px;display:flex;flex-direction:column;align-items:flex-end}
 .task-hours .h{font-size:17px;font-weight:800;color:var(--navy);line-height:1}
 .task-hours .h .u{font-size:10px;color:var(--gray);font-weight:500}
@@ -140,9 +141,15 @@ button{font-family:inherit;cursor:pointer}
 .detail-block .dv.rich [style]{font-size:12.5px!important}
 
 /* FAB */
-.fab-bar{position:fixed;bottom:16px;left:50%;transform:translateX(-50%);background:var(--navy);color:#fff;border-radius:12px;padding:9px 13px;display:flex;gap:7px;align-items:center;box-shadow:0 10px 30px rgba(12,35,64,.30);z-index:90;flex-wrap:wrap;justify-content:center;max-width:calc(100% - 24px)}
-.fab-bar .fl{font-size:10.5px;color:var(--gray-light);text-transform:uppercase;letter-spacing:.5px;font-weight:700;padding:0 6px}
-.btn-fab{padding:8px 13px;background:rgba(255,255,255,.10);border:1px solid rgba(255,255,255,.14);border-radius:8px;color:#fff;font-size:12px;font-weight:600;display:inline-flex;align-items:center;gap:5px}
+.fab-bar{position:fixed;right:16px;top:50%;transform:translateY(-50%);background:var(--navy);color:#fff;border-radius:12px;padding:13px 11px;display:flex;flex-direction:column;gap:7px;align-items:stretch;box-shadow:0 10px 30px rgba(12,35,64,.30);z-index:90;width:172px;max-height:calc(100vh - 140px);overflow-y:auto}
+.fab-bar .fl{font-size:10.5px;color:var(--gray-light);text-transform:uppercase;letter-spacing:.5px;font-weight:700;padding:0 4px;text-align:center}
+.btn-fab{padding:8px 13px;background:rgba(255,255,255,.10);border:1px solid rgba(255,255,255,.14);border-radius:8px;color:#fff;font-size:12px;font-weight:600;display:inline-flex;align-items:center;gap:5px;justify-content:flex-start;width:100%}
+@media(max-width:2200px){.container{padding-right:220px}}
+@media(max-width:900px){
+  .fab-bar{right:auto;top:auto;bottom:16px;left:50%;transform:translateX(-50%);flex-direction:row;flex-wrap:wrap;justify-content:center;align-items:center;width:auto;max-width:calc(100% - 24px);max-height:none;overflow:visible;padding:9px 13px}
+  .btn-fab{width:auto}
+  .container{padding-right:24px}
+}
 .btn-fab:hover{background:rgba(255,255,255,.18)}
 .btn-fab.primary{background:var(--grad);border-color:transparent} .btn-fab.primary:hover{filter:brightness(1.1)}
 .btn-fab.danger{background:transparent;border-color:rgba(255,122,136,.4);color:#FF9AA6}
@@ -376,6 +383,14 @@ function renderTask(t){
   const decClass = d.decision ? `decided-${d.decision}` : "";
   const est = Number(t.time_estimate)||0;
   const nec = necessidadeOf(t), mod = moduloOf(t), et = etapaOf(t);
+  // todas as demais tags do ticket viram chips no card (sem repetir as já
+  // representadas pelos chips de etapa / módulo / necessidade)
+  const _tgUp = tUp(t);
+  const _matched = new Set();
+  const _etTag = ["ORCAMENTO PENDENTE","LEVANTAR REQUISITOS","LEVANTAMENTO","GAP"].find(x=>_tgUp.includes(x)); if(_etTag) _matched.add(_etTag);
+  const _modTag = PROTHEUS_MODS.find(x=>_tgUp.includes(x)); if(_modTag) _matched.add(_modTag);
+  const _necTag = NECESSIDADES.find(x=>_tgUp.includes(x)); if(_necTag) _matched.add(_necTag);
+  const extraTags = (t.tags||[]).filter(x=>!_matched.has(String(x).toUpperCase()));
   return `
   <div class="task ${decClass}" data-code="${t.id}">
     <div class="task-top">
@@ -386,6 +401,7 @@ function renderTask(t){
           <span class="tag-mini modulo">${esc(mod)}</span>
           ${nec!=="—"?`<span class="tag-mini necessidade">${esc(nec)}</span>`:""}
           <span class="tag-mini">${esc(t.status_description||"")}</span>
+          ${extraTags.map(x=>`<span class="tag-mini raw">${esc(x)}</span>`).join("")}
         </div>
       </div>
       <div class="task-hours">
