@@ -179,7 +179,30 @@ button{font-family:inherit;cursor:pointer}
 #simFaixa.on{display:flex}
 /* Perfil leitor: nada de decidir nem estimar — só olhar (o backend reconfere) */
 body.so-leitura .btn-decide,
+body.so-leitura .tag-add,
+body.so-leitura .tag-chip .x,
 body.so-leitura [data-setest]{display:none}
+
+/* ── Ajuste de tags (adicionar / remover) dentro de "Ver detalhes" ── */
+.tag-edit .dl .hint{font-weight:500;text-transform:none;letter-spacing:0;color:var(--gray-light);font-size:10.5px}
+.tag-chips{display:flex;flex-wrap:wrap;gap:6px;margin:8px 0 10px}
+.tag-chips .vazio{font-size:11.5px;color:var(--gray)}
+.tag-chip{display:inline-flex;align-items:center;gap:6px;background:#EEF2F7;border:1px solid #DCE3E8;color:var(--navy);
+  font-size:11px;font-weight:600;padding:3px 5px 3px 9px;border-radius:6px}
+.tag-chip .x{border:0;background:transparent;color:var(--gray);font-size:13px;line-height:1;padding:0 3px;border-radius:4px}
+.tag-chip .x:hover{background:#FCE3E5;color:var(--refuse)}
+.tag-add{position:relative;max-width:340px}
+.tag-add input{width:100%;padding:8px 11px;border:1px solid #DCE3E8;border-radius:8px;font-family:var(--font);font-size:12px;background:#fff;color:var(--navy)}
+.tag-add input:focus{outline:none;border-color:var(--roxo);box-shadow:0 0 0 3px rgba(111,91,255,.14)}
+.tag-drop{position:absolute;top:calc(100% + 4px);left:0;right:0;background:#fff;border:1px solid #DCE3E8;border-radius:9px;
+  box-shadow:0 10px 26px rgba(12,35,64,.16);max-height:230px;overflow-y:auto;z-index:60;display:none}
+.tag-drop.open{display:block}
+.tag-drop .opt{padding:7px 11px;font-size:12px;font-weight:600;color:var(--navy);display:flex;justify-content:space-between;gap:8px;cursor:pointer}
+.tag-drop .opt:hover,.tag-drop .opt.active{background:var(--lilas)}
+.tag-drop .opt .idb{font-size:10px;color:var(--gray-light);font-weight:500}
+.tag-drop .empty{padding:9px 11px;font-size:11.5px;color:var(--gray)}
+.tag-msg{font-size:11px;font-weight:600;margin-top:7px;min-height:14px}
+.tag-msg.ok{color:var(--approve)} .tag-msg.err{color:var(--refuse)} .tag-msg.wait{color:var(--gray)}
 body.so-leitura input[data-est]{pointer-events:none;opacity:.6}
 #simFaixa button{margin-left:auto;background:#4A3200;color:#FFF3DD;border:0;border-radius:7px;
   padding:5px 11px;font-size:11.5px;font-weight:700;cursor:pointer}
@@ -386,31 +409,33 @@ function render(){
   bindEvents(); applyAll(); updateKPIs(); applyFilter(); updateProgress();
 }
 
+// Chips do topo do card: etapa / módulo / necessidade / status + TODAS as demais
+// tags do ticket (sem repetir as que já viraram um dos chips coloridos).
+function metaHTML(t){
+  const nec = necessidadeOf(t), mod = moduloOf(t), et = etapaOf(t);
+  const tgUp = tUp(t);
+  const matched = new Set();
+  const etTag = ["ORCAMENTO PENDENTE","LEVANTAR REQUISITOS","LEVANTAMENTO","GAP"].find(x=>tgUp.includes(x)); if(etTag) matched.add(etTag);
+  const modTag = PROTHEUS_MODS.find(x=>tgUp.includes(x)); if(modTag) matched.add(modTag);
+  const necTag = NECESSIDADES.find(x=>tgUp.includes(x)); if(necTag) matched.add(necTag);
+  const extras = (t.tags||[]).filter(x=>!matched.has(String(x).toUpperCase()));
+  return `<span class="tag-mini tipo">${esc(et)}</span>`
+       + `<span class="tag-mini modulo">${esc(mod)}</span>`
+       + (nec!=="—"?`<span class="tag-mini necessidade">${esc(nec)}</span>`:"")
+       + `<span class="tag-mini">${esc(t.status_description||"")}</span>`
+       + extras.map(x=>`<span class="tag-mini raw">${esc(x)}</span>`).join("");
+}
+
 function renderTask(t){
   const d = decisions[t.id] || {};
   const decClass = d.decision ? `decided-${d.decision}` : "";
   const est = Number(t.time_estimate)||0;
-  const nec = necessidadeOf(t), mod = moduloOf(t), et = etapaOf(t);
-  // todas as demais tags do ticket viram chips no card (sem repetir as já
-  // representadas pelos chips de etapa / módulo / necessidade)
-  const _tgUp = tUp(t);
-  const _matched = new Set();
-  const _etTag = ["ORCAMENTO PENDENTE","LEVANTAR REQUISITOS","LEVANTAMENTO","GAP"].find(x=>_tgUp.includes(x)); if(_etTag) _matched.add(_etTag);
-  const _modTag = PROTHEUS_MODS.find(x=>_tgUp.includes(x)); if(_modTag) _matched.add(_modTag);
-  const _necTag = NECESSIDADES.find(x=>_tgUp.includes(x)); if(_necTag) _matched.add(_necTag);
-  const extraTags = (t.tags||[]).filter(x=>!_matched.has(String(x).toUpperCase()));
   return `
   <div class="task ${decClass}" data-code="${t.id}">
     <div class="task-top">
       <div>
         <div class="task-id-row"><span class="task-code">#${t.id}</span><span class="task-title">${esc(t.title||"—")}</span></div>
-        <div class="task-meta">
-          <span class="tag-mini tipo">${esc(et)}</span>
-          <span class="tag-mini modulo">${esc(mod)}</span>
-          ${nec!=="—"?`<span class="tag-mini necessidade">${esc(nec)}</span>`:""}
-          <span class="tag-mini">${esc(t.status_description||"")}</span>
-          ${extraTags.map(x=>`<span class="tag-mini raw">${esc(x)}</span>`).join("")}
-        </div>
+        <div class="task-meta" data-meta="${t.id}">${metaHTML(t)}</div>
       </div>
       <div class="task-hours">
         ${est>0?`<span class="h">${fmtH(est)}<span class="u">h</span></span>`:`<span class="h noest">s/ est.</span>`}
@@ -438,7 +463,15 @@ function renderTask(t){
         <div><div class="lbl">Processo / Serviço</div><div class="val">${esc(processoOf(t))}</div></div>
         <div><div class="lbl">Projeto</div><div class="val">${esc(t.project_description||"—")}</div></div>
         <div><div class="lbl">Consultor</div><div class="val">${esc(consultorOf(t))}</div></div>
-        <div><div class="lbl">Tags</div><div class="val">${esc((t.tags||[]).join(", "))}</div></div>
+      </div>
+      <div class="detail-block tag-edit">
+        <div class="dl">🏷️ Tags <span class="hint">— o × remove; digite abaixo para adicionar. Grava direto no Tasks SC.</span></div>
+        <div class="tag-chips" data-tagchips="${t.id}"></div>
+        <div class="tag-add">
+          <input type="text" data-taginput="${t.id}" placeholder="digite para buscar uma tag…" autocomplete="off">
+          <div class="tag-drop" data-tagdrop="${t.id}"></div>
+        </div>
+        <div class="tag-msg" data-tagmsg="${t.id}"></div>
       </div>
       <div class="detail-block"><div class="dl">📄 Descrição</div><div class="dv muted" data-desc="${t.id}">Carregar descrição ao expandir…</div></div>
     </div>
@@ -455,7 +488,7 @@ function bindEvents(){
     if(act==="toggle"){
       const task=b.closest(".task"); const open=task.classList.toggle("open-details"); task.classList.toggle("has-note", open||decisions[code]?.decision||decisions[code]?.note);
       b.textContent = open?"Ocultar detalhes ▴":"Ver detalhes ▾";
-      if(open) loadDesc(code);
+      if(open){ loadDesc(code); buildTagEditor(code); }
     } else decide(code, act);
   });
   $$("textarea[data-note]").forEach(ta=>ta.oninput=()=>{ const c=ta.dataset.note; decisions[c]=decisions[c]||{}; decisions[c].note=ta.value; markDirty(); });
@@ -487,6 +520,118 @@ async function loadDesc(code){
     else { el.className="dv muted"; el.textContent="Sem descrição registrada."; }
   }
   catch(e){ el.className="dv muted"; el.textContent="Erro ao carregar descrição."; }
+}
+
+/* ════════ Ajuste de tags (adicionar / remover) — grava ao vivo ════════
+   Manda só a INTENÇÃO (tags_add / tags_remove). O backend aplica o delta sobre
+   as tags AO VIVO do Tasks SC (GET→merge→PUT) e depois espelha em
+   cockpit.ticket_tags — assim uma tag que só exista lá nunca some por engano. */
+let tagCatalog = [];
+let tagCatalogCarregando = null;
+
+function loadTagCatalog(){
+  if(tagCatalog.length) return Promise.resolve(tagCatalog);
+  if(!tagCatalogCarregando){
+    tagCatalogCarregando = api("/api/tags-catalog")
+      .then(j=>{ tagCatalog = j.items||[]; return tagCatalog; })
+      .catch(()=>[])
+      .finally(()=>{ tagCatalogCarregando = null; });
+  }
+  return tagCatalogCarregando;
+}
+function tagMsg(code, txt, cls){
+  const el = $(`[data-tagmsg="${code}"]`); if(!el) return;
+  el.textContent = txt || ""; el.className = "tag-msg" + (cls?" "+cls:"");
+}
+function renderTagChips(t){
+  const box = $(`[data-tagchips="${t.id}"]`); if(!box) return;
+  const tags = t.tags||[];
+  box.innerHTML = tags.length
+    ? tags.map(x=>`<span class="tag-chip">${esc(x)}<button class="x" type="button" data-tagdel="${esc(x)}" title="Remover">×</button></span>`).join("")
+    : `<span class="vazio">Sem tags neste GAP.</span>`;
+  box.querySelectorAll("[data-tagdel]").forEach(b=>b.onclick=e=>{
+    e.stopPropagation();
+    const tg = b.dataset.tagdel;
+    if(!confirm(`Remover a tag "${tg}" do #${t.id}?\n\nA alteração é gravada no Tasks SC na hora.`)) return;
+    saveTagDelta(t, [], [tg], `tag −${tg}`);
+  });
+}
+async function saveTagDelta(t, add, remove, label){
+  tagMsg(t.id, "Gravando no Tasks SC…", "wait");
+  try{
+    const resp = await api(`/api/ticket/${t.uuid}/update`, {
+      method:"POST", headers:{"Content-Type":"application/json"},
+      body: JSON.stringify({tags_add:add, tags_remove:remove})
+    });
+    // a verdade é a lista que o Tasks SC devolveu depois do PUT
+    if(resp && resp.tags) t.tags = resp.tags;
+    else {
+      const remU = remove.map(x=>x.toUpperCase());
+      t.tags = (t.tags||[]).filter(x=>!remU.includes(String(x).toUpperCase())).concat(add);
+    }
+    renderTagChips(t);
+    const meta = $(`[data-meta="${t.id}"]`); if(meta) meta.innerHTML = metaHTML(t);
+    tagMsg(t.id, `Salvo às ${new Date().toLocaleTimeString("pt-BR")} — Tasks SC e Supabase atualizados.`, "ok");
+    toast(`#${t.id} · ${label} ✓`, "approve");
+  }catch(e){
+    tagMsg(t.id, "Falha ao gravar: " + e.message, "err");
+    toast(`#${t.id} · falha na tag: ${e.message}`, "refuse");
+  }
+}
+// Monta o autocomplete de uma task quando "Ver detalhes" abre (uma única vez).
+function buildTagEditor(code){
+  const inp = $(`[data-taginput="${code}"]`);
+  if(!inp || inp.dataset.ready) return;
+  inp.dataset.ready = "1";
+  const drop = $(`[data-tagdrop="${code}"]`);
+  const t = TASKS.find(x=>x.id===code); if(!t) return;
+  renderTagChips(t);
+  loadTagCatalog();
+  let active = -1;
+  const fechar = ()=>{ drop.classList.remove("open"); active=-1; };
+  const jaTem = ()=> (t.tags||[]).map(x=>String(x).toUpperCase());
+  function refresh(){
+    const termo = inp.value.trim().toUpperCase();
+    const tem = jaTem();
+    let list = tagCatalog.filter(x=> x.tag && !tem.includes(String(x.tag).toUpperCase()));
+    if(termo) list = list.filter(x=> String(x.tag).toUpperCase().includes(termo));
+    const vistos = new Set();
+    list = list.filter(x=>{ const k=String(x.id||x.tag).toUpperCase(); if(vistos.has(k)) return false; vistos.add(k); return true; });
+    if(termo) list.sort((a,b)=>
+      (String(a.tag).toUpperCase().startsWith(termo)?0:1) - (String(b.tag).toUpperCase().startsWith(termo)?0:1));
+    list = list.slice(0,30);
+    active = -1;
+    drop.innerHTML = list.length
+      ? list.map(m=>`<div class="opt" data-tag="${esc(m.tag)}">${esc(m.tag)}<span class="idb">#${esc(m.id||"")}</span></div>`).join("")
+      : `<div class="empty">${tagCatalog.length?"nenhuma tag encontrada":"carregando catálogo…"}</div>`;
+    drop.querySelectorAll(".opt").forEach(o=> o.onmousedown = e=>{
+      e.preventDefault();
+      inp.value = ""; fechar();
+      saveTagDelta(t, [o.dataset.tag], [], `tag +${o.dataset.tag}`);
+    });
+    drop.classList.add("open");
+  }
+  inp.onclick = e=>e.stopPropagation();
+  inp.onfocus = ()=>{ if(!tagCatalog.length) loadTagCatalog().then(refresh); refresh(); };
+  inp.oninput = ()=>{ if(!tagCatalog.length) loadTagCatalog().then(refresh); refresh(); };
+  inp.onblur  = ()=> setTimeout(fechar, 160);
+  inp.onkeydown = e=>{
+    const opts = [...drop.querySelectorAll(".opt")];
+    if(e.key==="ArrowDown") active = Math.min(active+1, opts.length-1);
+    else if(e.key==="ArrowUp") active = Math.max(active-1, 0);
+    else if(e.key==="Enter"){
+      e.preventDefault();
+      // só grava a partir da lista — evita criar tag inexistente no catálogo
+      if(active>=0 && opts[active]){ const tg=opts[active].dataset.tag; inp.value=""; fechar(); saveTagDelta(t,[tg],[],`tag +${tg}`); }
+      else tagMsg(code, "Escolha uma tag da lista (só dá para usar tags já cadastradas no Tasks SC).", "err");
+      return;
+    }
+    else if(e.key==="Escape"){ fechar(); return; }
+    else return;
+    e.preventDefault();
+    opts.forEach((o,i)=> o.classList.toggle("active", i===active));
+    if(opts[active]) opts[active].scrollIntoView({block:"nearest"});
+  };
 }
 
 /* ════════════════ "Ver como" — admin simula a visão de outro usuário ════════
