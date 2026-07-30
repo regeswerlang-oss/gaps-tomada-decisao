@@ -49,6 +49,16 @@ Dados (Supabase) — exigem login
   POST /api/decisoes?cliente=digitro       → upsert cockpit.decisoes
   GET  /api/drive-index                    → cockpit.integration_config['drive_index']
 
+Base de Conhecimento Protheus (kb.html — Módulo → Assunto → Artigo, por cliente):
+  GET  /kb                                 → kb.html (login)
+  GET  /api/kb/artigos?cliente=digitro     → lista artigos (leitor só vê publicado)
+  POST /api/kb/artigos?cliente=digitro     → cria/edita artigo (só admin/comum)
+  POST /api/kb/artigos/<id>/excluir        → exclui artigo (só admin/comum)
+  GET  /api/kb/link?cliente=digitro        → get-or-create link público (só editor)
+  POST /api/kb/link?cliente=digitro        → {acao: renovar|ativar|desativar}
+  GET  /kb/publico/<token>                 → kb.html público (sem login, só leitura)
+  GET  /api/kb/publico/<token>/artigos     → artigos publicados do dono do token
+
 Tasks SC (ao vivo) — exigem login
   GET  /api/ticket/<uuid>                  → detalhe do ticket
   GET  /api/ticket/<uuid>/history          → histórico (+ NOTEBOOKLM:/PERSONALIZACAO:)
@@ -689,6 +699,15 @@ def page_import():
     return serve_file("gaps-import.html")
 
 
+@app.get("/kb")
+@app.get("/kb.html")
+def page_kb():
+    """Base de Conhecimento Protheus por cliente (Módulo → Assunto → Artigo)."""
+    if not current_user():
+        return redirect("/login", code=302)
+    return serve_file("kb.html")
+
+
 @app.get("/admin")
 @app.get("/admin.html")
 def page_admin():
@@ -1272,6 +1291,241 @@ def api_decisoes_post():
 
 
 # ─────────────────────────────────────────────────────────────────────────────
+# Base de Conhecimento Protheus — cockpit.kb_artigos (Módulo → Assunto → Artigo)
+# Consultor (admin/comum) escreve; perfis 'cliente' e 'leitor' só leem os
+# artigos publicados. Tudo recortado por customer (allowed_customers).
+# ─────────────────────────────────────────────────────────────────────────────
+KB_PERFIS_EDITAM = ("admin", "comum")
+
+
+def _kb_pode_editar():
+    """Editor de verdade: perfil admin/comum E fora do modo 'ver como'."""
+    return (not simulando()) and perfil_de(current_user()) in KB_PERFIS_EDITAM
+
+
+def require_kb_write():
+    """Escrita na Base de Conhecimento: só consultor (admin/comum)."""
+    if (r := require_auth()):
+        return r
+    if perfil_de(current_user()) not in KB_PERFIS_EDITAM:
+        return _err(403, "Seu perfil é somente de leitura na Base de Conhecimento.")
+    return None
+
+
+@app.get("/api/kb/artigos")
+def api_kb_list():
+    if (r := require_auth()):
+        return r
+    chave = request.args.get("cliente", "digitro")
+    customer, nome = _resolve_customer(chave)
+    if not customer:
+        return _err(404, f"Cliente '{chave}' não encontrado.")
+    if (d := deny_customer(customer)):
+        return d
+    editor = _kb_pode_editar()
+    # Leitores (cliente/leitor — e o 'ver como') só enxergam o publicado.
+    filtro = "" if editor else " and publicado"
+    rows = q(f"""
+        select id::text as id, modulo, assunto, titulo, corpo_html, ordem,
+               publicado, updated_by, updated_at
+        from cockpit.kb_artigos
+        where customer = %s{filtro}
+        order by modulo, assunto, ordem, titulo
+    """, (customer,))
+    artigos = []
+    for r in rows:
+        artigos.append({
+            "id": r["id"], "modulo": r["modulo"], "assunto": r["assunto"],
+            "titulo": r["titulo"], "corpo_html": r["corpo_html"] or "",
+            "ordem": r["ordem"], "publicado": r["publicado"],
+            "atualizado_por": r["updated_by"],
+            "atualizado_em": (r["updated_at"].astimezone().strftime("%d/%m/%Y %H:%M")
+                              if r["updated_at"] else None),
+        })
+    return _json({"ok": True, "cliente": _slug_first(nome), "customer": customer,
+                  "nome_cliente": nome, "pode_editar": editor, "artigos": artigos})
+
+
+@app.post("/api/kb/artigos")
+def api_kb_save():
+    """Cria ou edita um artigo. Body: {id?, modulo, assunto, titulo,
+    corpo_html, ordem?, publicado?}. Sem id → insere; com id → atualiza."""
+    if (w := require_kb_write()):
+        return w
+    if (sim := deny_simulacao()):
+        return sim
+    chave = request.args.get("cliente", "digitro")
+    customer, nome = _resolve_customer(chave)
+    if not customer:
+        return _err(404, f"Cliente '{chave}' não encontrado.")
+    if (d := deny_customer(customer)):
+        return d
+    body = request.get_json(silent=True) or {}
+    modulo = (body.get("modulo") or "").strip().upper()
+    assunto = (body.get("assunto") or "").strip()
+    titulo = (body.get("titulo") or "").strip()
+    if not modulo or not assunto or not titulo:
+        return _err(400, "Informe módulo, assunto e título.")
+    corpo = body.get("corpo_html") or ""
+    try:
+        ordem = int(body.get("ordem") or 0)
+    except (TypeError, ValueError):
+        ordem = 0
+    publicado = bool(body.get("publicado", True))
+    user = current_user()
+    art_id = (body.get("id") or "").strip()
+    if art_id:
+        row = q("""
+            update cockpit.kb_artigos
+               set modulo=%s, assunto=%s, titulo=%s, corpo_html=%s, ordem=%s,
+                   publicado=%s, updated_by=%s, updated_at=now()
+             where id=%s::uuid and customer=%s
+            returning id::text as id
+        """, (modulo, assunto, titulo, corpo, ordem, publicado, user,
+              art_id, customer), one=True)
+        if not row:
+            return _err(404, "Artigo não encontrado para este cliente.")
+    else:
+        row = q("""
+            insert into cockpit.kb_artigos
+              (customer, modulo, assunto, titulo, corpo_html, ordem, publicado,
+               created_by, updated_by)
+            values (%s, %s, %s, %s, %s, %s, %s, %s, %s)
+            returning id::text as id
+        """, (customer, modulo, assunto, titulo, corpo, ordem, publicado,
+              user, user), one=True)
+    return _json({"ok": True, "id": row["id"]})
+
+
+# ── Link público (somente leitura) por cliente ──────────────────────────────
+def _kb_link_row(customer):
+    return q("select customer, token, ativo from cockpit.kb_links where customer=%s",
+             (customer,), one=True)
+
+
+@app.get("/api/kb/link")
+def api_kb_link():
+    """Retorna (criando se preciso) o link público da base do cliente.
+    Só editor (admin/comum) enxerga o token."""
+    if (w := require_kb_write()):
+        return w
+    chave = request.args.get("cliente", "digitro")
+    customer, nome = _resolve_customer(chave)
+    if not customer:
+        return _err(404, f"Cliente '{chave}' não encontrado.")
+    if (d := deny_customer(customer)):
+        return d
+    row = _kb_link_row(customer)
+    if not row:
+        row = q("""insert into cockpit.kb_links (customer, created_by)
+                   values (%s, %s)
+                   on conflict (customer) do update set updated_at=now()
+                   returning customer, token, ativo""",
+                (customer, current_user()), one=True)
+    return _json({"ok": True, "customer": customer, "cliente": _slug_first(nome),
+                  "token": row["token"], "ativo": row["ativo"],
+                  "path": f"/kb/publico/{row['token']}"})
+
+
+@app.post("/api/kb/link")
+def api_kb_link_acao():
+    """Ações sobre o link público. Body: {acao: 'renovar'|'ativar'|'desativar'}.
+    'renovar' gera token novo (o antigo para de funcionar na hora)."""
+    if (w := require_kb_write()):
+        return w
+    if (sim := deny_simulacao()):
+        return sim
+    chave = request.args.get("cliente", "digitro")
+    customer, nome = _resolve_customer(chave)
+    if not customer:
+        return _err(404, f"Cliente '{chave}' não encontrado.")
+    if (d := deny_customer(customer)):
+        return d
+    acao = ((request.get_json(silent=True) or {}).get("acao") or "").strip().lower()
+    if acao not in ("renovar", "ativar", "desativar"):
+        return _err(400, "Ação inválida. Use renovar, ativar ou desativar.")
+    if not _kb_link_row(customer):
+        q("""insert into cockpit.kb_links (customer, created_by) values (%s, %s)
+             on conflict (customer) do nothing returning customer""",
+          (customer, current_user()), one=True)
+    if acao == "renovar":
+        row = q("""update cockpit.kb_links
+                     set token = replace(gen_random_uuid()::text || gen_random_uuid()::text, '-', ''),
+                         ativo = true, updated_at = now()
+                   where customer=%s
+                   returning token, ativo""", (customer,), one=True)
+    else:
+        row = q("""update cockpit.kb_links
+                     set ativo = %s, updated_at = now()
+                   where customer=%s
+                   returning token, ativo""", (acao == "ativar", customer), one=True)
+    return _json({"ok": True, "customer": customer, "token": row["token"],
+                  "ativo": row["ativo"], "path": f"/kb/publico/{row['token']}"})
+
+
+def _kb_customer_por_token(token):
+    row = q("""select l.customer, c.nome
+               from cockpit.kb_links l
+               join cockpit.clientes c on c.customer = l.customer
+               where l.token=%s and l.ativo""", (token,), one=True)
+    return (row["customer"], row["nome"]) if row else (None, None)
+
+
+@app.get("/kb/publico/<token>")
+def page_kb_publico(token):
+    """Base de conhecimento pública (somente leitura) — sem login."""
+    customer, _ = _kb_customer_por_token(token)
+    if not customer:
+        return _err(404, "Link inválido ou desativado.")
+    return serve_file("kb.html")
+
+
+@app.get("/api/kb/publico/<token>/artigos")
+def api_kb_publico(token):
+    """Artigos publicados do cliente dono do token — sem login."""
+    customer, nome = _kb_customer_por_token(token)
+    if not customer:
+        return _err(404, "Link inválido ou desativado.")
+    rows = q("""
+        select id::text as id, modulo, assunto, titulo, corpo_html, ordem,
+               publicado, updated_at
+        from cockpit.kb_artigos
+        where customer = %s and publicado
+        order by modulo, assunto, ordem, titulo
+    """, (customer,))
+    artigos = [{
+        "id": r["id"], "modulo": r["modulo"], "assunto": r["assunto"],
+        "titulo": r["titulo"], "corpo_html": r["corpo_html"] or "",
+        "ordem": r["ordem"], "publicado": True, "atualizado_por": None,
+        "atualizado_em": (r["updated_at"].astimezone().strftime("%d/%m/%Y %H:%M")
+                          if r["updated_at"] else None),
+    } for r in rows]
+    return _json({"ok": True, "cliente": _slug_first(nome), "customer": customer,
+                  "nome_cliente": nome, "pode_editar": False, "publico": True,
+                  "artigos": artigos})
+
+
+@app.post("/api/kb/artigos/<art_id>/excluir")
+def api_kb_delete(art_id):
+    if (w := require_kb_write()):
+        return w
+    if (sim := deny_simulacao()):
+        return sim
+    chave = request.args.get("cliente", "digitro")
+    customer, _ = _resolve_customer(chave)
+    if not customer:
+        return _err(404, f"Cliente '{chave}' não encontrado.")
+    if (d := deny_customer(customer)):
+        return d
+    row = q("""delete from cockpit.kb_artigos
+               where id=%s::uuid and customer=%s
+               returning id::text as id""", (art_id, customer), one=True)
+    if not row:
+        return _err(404, "Artigo não encontrado para este cliente.")
+    return _json({"ok": True, "id": row["id"]})
+
+
+# ─────────────────────────────────────────────────────────────────────────────
 # Importação de decisões (JSON) + auto-tag + comparação de estimativa
 # ─────────────────────────────────────────────────────────────────────────────
 def _decisao_tags_map():
@@ -1759,7 +2013,7 @@ def static_assets(asset):
     safe = (PUBLIC_DIR / asset).resolve()
     if PUBLIC_DIR in safe.parents and safe.exists() and safe.is_file():
         # páginas sensíveis exigem login
-        if safe.name in ("gaps-decisao.html", "gaps-reuniao.html", "gaps-import.html") and not current_user():
+        if safe.name in ("gaps-decisao.html", "gaps-reuniao.html", "gaps-import.html", "kb.html") and not current_user():
             return redirect("/login", code=302)
         ext = safe.suffix.lower()
         ctype = {".html": "text/html; charset=utf-8", ".js": "application/javascript",
