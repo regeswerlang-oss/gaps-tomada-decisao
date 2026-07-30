@@ -84,7 +84,7 @@ import time
 import unicodedata
 from datetime import datetime, timezone
 from pathlib import Path
-from urllib.parse import unquote
+from urllib.parse import parse_qsl, unquote, urlencode
 
 import psycopg2
 import psycopg2.extras
@@ -126,6 +126,48 @@ ALLOWED_PUT = {
 app = Flask(__name__)
 
 
+class _VercelRewritePath:
+    """Restaura o caminho ORIGINAL da requisição.
+
+    Armadilha real (2026-07-30): o `vercel.json` faz
+    `rewrites: [{source:"/(.*)", destination:"/api/index"}]`. A Vercel entrega
+    à função o caminho de DESTINO — ou seja, `PATH_INFO` chega SEMPRE como
+    `/api/index`, para `/`, `/login`, `/api/health`, tudo. Nenhuma rota do
+    Flask casa e todas caem no catch-all `/<path:asset>`, que responde
+    `{"ok": false, "error": "Rota de API desconhecida."}` — o site inteiro 404.
+
+    Contrato: o `vercel.json` manda o caminho real em `?__path=/…`; aqui a
+    gente devolve para o `PATH_INFO` e tira o `__path` da query, antes do
+    roteamento. Fallback: header `x-vercel-original-path`, se existir.
+    Só age quando `PATH_INFO` é o caminho da própria função — se um dia a
+    Vercel voltar a preservar o path, este middleware fica inerte.
+    """
+
+    FUNC_PATHS = ("/api/index", "/api/index/", "/api/index.py")
+
+    def __init__(self, wsgi_app):
+        self.wsgi_app = wsgi_app
+
+    def __call__(self, environ, start_response):
+        if environ.get("PATH_INFO", "") in self.FUNC_PATHS:
+            pares = parse_qsl(environ.get("QUERY_STRING", ""), keep_blank_values=True)
+            real, resto = None, []
+            for k, v in pares:
+                if k == "__path" and real is None:
+                    real = v
+                else:
+                    resto.append((k, v))
+            if not real:
+                real = environ.get("HTTP_X_VERCEL_ORIGINAL_PATH") or None
+            if real:
+                if not real.startswith("/"):
+                    real = "/" + real
+                environ["PATH_INFO"] = real
+                environ["QUERY_STRING"] = urlencode(resto)
+                environ["RAW_URI"] = real + (("?" + environ["QUERY_STRING"]) if environ["QUERY_STRING"] else "")
+        return self.wsgi_app(environ, start_response)
+
+
 class _StripGapsPrefix:
     """Compat: telas antigas chamam /gaps/api/... — removemos o prefixo /gaps
     antes do roteamento, para que /gaps/api/x e /api/x apontem ao mesmo lugar."""
@@ -141,6 +183,7 @@ class _StripGapsPrefix:
 
 
 app.wsgi_app = _StripGapsPrefix(app.wsgi_app)
+app.wsgi_app = _VercelRewritePath(app.wsgi_app)  # deve rodar ANTES do strip /gaps
 
 # ─────────────────────────────────────────────────────────────────────────────
 # Helpers gerais

@@ -166,3 +166,41 @@ python3 api/index.py      # http://localhost:8090
 - **Espelho de edições**: após um PUT no Tasks SC, os campos alterados são
   espelhados em `cockpit.tickets`/`ticket_tags` (best-effort) para o board
   refletir na hora; a normalização completa vem no próximo sync.
+
+## Roteamento na Vercel — o contrato `?__path=` (NÃO MEXER SEM LER)
+
+**Sintoma que isso resolve (2026-07-30):** *qualquer* URL do site — `/`,
+`/login`, `/api/health`, `/api/clientes` — respondia
+`404 {"ok": false, "error": "Rota de API desconhecida."}`, e o dashboard
+carregava vazio/quebrado.
+
+**Causa.** O `vercel.json` manda tudo para a função:
+
+```json
+"rewrites": [{ "source": "/(.*)", "destination": "/api/index?__path=/$1" }]
+```
+
+Com a destination "seca" (`/api/index`), a Vercel entrega à função o caminho de
+**destino**, não o original: o Flask recebia `PATH_INFO=/api/index` em **toda**
+requisição. Nenhuma rota casava e tudo caía no catch-all `/<path:asset>`, que
+responde exatamente aquela mensagem.
+
+**Fix.** O caminho real viaja na query `__path` e o middleware
+`_VercelRewritePath` (topo do `api/index.py`) devolve para o `PATH_INFO` antes
+do roteamento, removendo `__path` e preservando o resto da query. Fallback:
+header `x-vercel-original-path`. O middleware só age quando `PATH_INFO` é o
+caminho da própria função (`/api/index`), então fica inerte se a Vercel voltar a
+preservar o path.
+
+Ordem dos middlewares (de fora para dentro): `_VercelRewritePath` →
+`_StripGapsPrefix` → Flask. Inverter quebra o compat de `/gaps/api/...`.
+
+**Regra:** se um dia mudar o `destination` do rewrite, mude junto o
+`FUNC_PATHS`/contrato `__path` no `api/index.py`. Os dois andam em par.
+
+**Teste rápido pós-deploy** (sem login, deve responder JSON com `env`/`db`):
+
+```bash
+curl -s https://gaps-tomada-decisao.vercel.app/api/health
+curl -s -o /dev/null -w '%{http_code}\n' https://gaps-tomada-decisao.vercel.app/login   # 200
+```
