@@ -1334,6 +1334,142 @@ def api_decisoes_post():
 
 
 # ─────────────────────────────────────────────────────────────────────────────
+# Alinhamento do GAP — cockpit.gap_alinhamentos
+# A narrativa de cada GAP em quatro campos, na ordem em que a conversa acontece:
+#   questionamento_cliente → argumentacao_interna → alinhamento_reuniao → retorno_cliente
+# Vive SÓ no Supabase: nada aqui sai para o Tasks SC (por isso require_write,
+# e não require_tasks_write). A argumentação interna nunca chega ao perfil
+# 'cliente' — nem no 'ver como'. Migration: sql/0010_gap_alinhamentos.sql.
+# ─────────────────────────────────────────────────────────────────────────────
+ALIN_CAMPOS = ("questionamento_cliente", "argumentacao_interna",
+               "alinhamento_reuniao", "retorno_cliente")
+ALIN_INTERNO = "argumentacao_interna"
+
+
+def alin_ve_interno():
+    """A argumentação é nossa. O perfil 'cliente' não a recebe — e como olhamos
+    o effective_user, o admin em 'ver como cliente' também não, que é justamente
+    como se confere o que o cliente enxerga."""
+    return perfil_de(effective_user()) != "cliente"
+
+
+def _alin_payload(row):
+    """Row → JSON do alinhamento, já podado do que o perfil não pode ver."""
+    interno_ok = alin_ve_interno()
+    out = {"existe": bool(row), "ve_interno": interno_ok}
+    for c in ALIN_CAMPOS:
+        out[c] = (row.get(c) if row else None)
+    if not interno_ok:
+        out[ALIN_INTERNO] = None
+    out["updated_by"] = row.get("updated_by") if row else None
+    out["updated_at"] = row["updated_at"].isoformat() if (row and row.get("updated_at")) else None
+    return out
+
+
+@app.get("/api/alinhamento/<uuid>")
+def api_alinhamento_get(uuid):
+    if (r := require_auth()):
+        return r
+    if (g := deny_uuid(uuid)):
+        return g
+    row = q("""select uuid_ticket, task_id, customer,
+                      questionamento_cliente, argumentacao_interna,
+                      alinhamento_reuniao, retorno_cliente,
+                      created_by, created_at, updated_by, updated_at
+               from cockpit.gap_alinhamentos where uuid_ticket=%s""",
+            (uuid.upper(),), one=True)
+    return _json({"ok": True, "uuid": uuid.upper(), **_alin_payload(row)})
+
+
+@app.post("/api/alinhamento/<uuid>")
+def api_alinhamento_post(uuid):
+    """Gravação PARCIAL: só as chaves presentes no body são tocadas. Dois
+    consultores editando campos diferentes do mesmo GAP não se atropelam."""
+    if (r := require_auth()):
+        return r
+    if (w := require_write()):
+        return w
+    if (sim := deny_simulacao()):
+        return sim
+    if (g := deny_uuid(uuid)):
+        return g
+    body = request.get_json(silent=True) or {}
+    campos = {c: (body[c] or None) for c in ALIN_CAMPOS if c in body}
+    if not alin_ve_interno():
+        campos.pop(ALIN_INTERNO, None)   # quem não lê o interno também não escreve
+    if not campos:
+        return _err(400, "Nenhum campo de alinhamento informado.")
+    tk = q("select customer, raw->>'id' as task_id from cockpit.tickets "
+           "where uuid_ticket=%s", (uuid.upper(),), one=True)
+    if not tk:
+        return _err(404, "Ticket não encontrado no espelho do cockpit.")
+    user = current_user()
+    cols = list(campos.keys())
+    # INSERT com os campos enviados; no conflito, atualiza só esses mesmos.
+    sql = f"""
+        insert into cockpit.gap_alinhamentos
+          (uuid_ticket, task_id, customer, {", ".join(cols)}, created_by, updated_by)
+        values (%s, %s, %s, {", ".join(["%s"] * len(cols))}, %s, %s)
+        on conflict (uuid_ticket) do update set
+          task_id = coalesce(cockpit.gap_alinhamentos.task_id, excluded.task_id),
+          customer = coalesce(cockpit.gap_alinhamentos.customer, excluded.customer),
+          {", ".join(f"{c} = excluded.{c}" for c in cols)},
+          updated_by = excluded.updated_by
+    """
+    execute(sql, (uuid.upper(), tk["task_id"], tk["customer"],
+                  *[campos[c] for c in cols], user, user))
+    row = q("""select questionamento_cliente, argumentacao_interna,
+                      alinhamento_reuniao, retorno_cliente, updated_by, updated_at
+               from cockpit.gap_alinhamentos where uuid_ticket=%s""",
+            (uuid.upper(),), one=True)
+    return _json({"ok": True, "uuid": uuid.upper(),
+                  "gravados": cols, **_alin_payload(row)})
+
+
+@app.get("/api/alinhamentos")
+def api_alinhamentos_lista():
+    """Mapa enxuto por cliente, para o board marcar quem já tem alinhamento.
+    Não devolve texto — só quais campos estão preenchidos."""
+    if (r := require_auth()):
+        return r
+    chave = request.args.get("cliente", "digitro")
+    customer, nome = _resolve_customer(chave)
+    if not customer:
+        return _err(404, f"Cliente '{chave}' não encontrado.")
+    if (d := deny_customer(customer)):
+        return d
+    interno_ok = alin_ve_interno()
+    rows = q("""select a.uuid_ticket, a.task_id, a.updated_by, a.updated_at,
+                       (a.questionamento_cliente is not null and a.questionamento_cliente <> '') as tem_quest,
+                       (a.argumentacao_interna   is not null and a.argumentacao_interna   <> '') as tem_arg,
+                       (a.alinhamento_reuniao    is not null and a.alinhamento_reuniao    <> '') as tem_reuniao,
+                       (a.retorno_cliente        is not null and a.retorno_cliente        <> '') as tem_retorno
+                from cockpit.gap_alinhamentos a
+                join cockpit.tickets t on t.uuid_ticket = a.uuid_ticket
+                where t.customer = %s""", (customer,))
+    mapa = {}
+    for r_ in rows:
+        campos = {"questionamento_cliente": r_["tem_quest"],
+                  "alinhamento_reuniao": r_["tem_reuniao"],
+                  "retorno_cliente": r_["tem_retorno"]}
+        if interno_ok:
+            campos["argumentacao_interna"] = r_["tem_arg"]
+        entry = {
+            "preenchidos": sum(1 for v in campos.values() if v),
+            "campos": campos,
+            "por": r_["updated_by"],
+            "ts": r_["updated_at"].isoformat() if r_["updated_at"] else None,
+        }
+        if not any(campos.values()):
+            continue
+        mapa[r_["uuid_ticket"]] = entry
+        if r_["task_id"]:
+            mapa[r_["task_id"]] = entry
+    return _json({"ok": True, "cliente": _slug_first(nome), "customer": customer,
+                  "alinhamentos": mapa})
+
+
+# ─────────────────────────────────────────────────────────────────────────────
 # Base de Conhecimento Protheus — cockpit.kb_artigos (Módulo → Assunto → Artigo)
 # Consultor (admin/comum) escreve; perfis 'cliente' e 'leitor' só leem os
 # artigos publicados. Tudo recortado por customer (allowed_customers).
