@@ -195,7 +195,21 @@ body.so-leitura #btnDesc,
 body.so-leitura #btnEst,
 body.so-leitura #btnTec,
 body.so-leitura #btnAlinSalvar,
+body.so-leitura #btnAi_quest,
+body.so-leitura #btnAi_arg,
+body.so-leitura #btnAi_reuniao,
+body.so-leitura #btnAi_retorno,
 body.so-leitura #btnAddTag{display:none}
+
+/* ── Alinhamento inline (mesmos campos do modal, dentro do drawer) ── */
+.alintxt{width:100%;min-height:76px;resize:vertical;border:1px solid #D8D8E4;border-radius:9px;
+  padding:9px 11px;font:inherit;font-size:13px;line-height:1.45;color:var(--navy);
+  background:#fff;outline:none}
+.alintxt:focus{border-color:var(--roxo);box-shadow:0 0 0 3px rgba(118,65,192,.12)}
+.alintxt.interno{border-color:#E8C88A;background:#FFFDF8}
+.alintxt:disabled{background:var(--cinza);color:var(--muted)}
+.alinbar{display:flex;gap:8px;align-items:center;margin-top:7px}
+.alinbar .m{flex:1;font-size:11.5px;color:var(--muted)}
 
 /* ── Alinhamento do GAP (cockpit.gap_alinhamentos) ── */
 #alinBg .amodal{width:820px}
@@ -657,16 +671,129 @@ async function openDrawer(uuid){
 function closeDrawer(){ $("#overlay").classList.remove("open"); $("#drawer").classList.remove("open"); openUuid=null; }
 
 /* ════════════════ Alinhamento do GAP (cockpit.gap_alinhamentos) ════════════════
-   Modal próprio, e não mais um bloco no drawer: o drawer é a bancada da reunião
-   ao vivo e já está denso. Aqui se escreve com calma a narrativa do GAP.
-   O campo 2 é INTERNO — o backend não o entrega ao perfil 'cliente'. */
+   A narrativa do GAP em quatro campos, cada um ancorado ao lado do assunto de
+   que trata: o questionamento e o retorno junto do contexto do cliente; a
+   argumentação logo abaixo da especificação técnica; o alinhamento colado na
+   decisão da reunião. O modal 🤝 continua existindo como atalho para escrever
+   os quatro de uma vez, com mais espaço — os dois caminhos leem e gravam o
+   mesmo registro e se espelham na hora.
+   O campo 2 é INTERNO: o backend não o entrega ao perfil 'cliente'. */
+const ALIN_DEF = {
+  questionamento_cliente:{n:1, slug:"quest",   titulo:"Questionamento do cliente",
+    hint:"O que o cliente levantou sobre este GAP.",
+    ph:"Ex.: por que isto não é nativo? o processo atual não atende?"},
+  argumentacao_interna:{n:2, slug:"arg", interno:true, titulo:"Argumentação interna",
+    hint:"Nossa leitura do caso. Não vai para o cliente nem para o dashboard comercial.",
+    ph:"Ex.: o padrão cobre 80% do fluxo; o resto exige P.E. no MATA103 — 40h."},
+  alinhamento_reuniao:{n:3, slug:"reuniao", titulo:"Alinhado na reunião (TOTVS SC × Cliente)",
+    hint:"O que ficou acordado entre as partes.",
+    ph:"Ex.: cliente aceita o contorno na fase 1 e reavalia na fase 2."},
+  retorno_cliente:{n:4, slug:"retorno", titulo:"Retorno formal ao cliente",
+    hint:"O texto que será comunicado — escreva como se já fosse o e-mail.",
+    ph:"Ex.: a demanda foi classificada como GAP necessário, estimada em 40h…"},
+};
 const ALIN_IDS = {questionamento_cliente:"#alinQuest", argumentacao_interna:"#alinArg",
                   alinhamento_reuniao:"#alinReuniao", retorno_cliente:"#alinRetorno"};
+let alinCache = {};     // uuid → payload completo do GET/POST
+
 const alinDe = t => alinMap[t.uuid] || alinMap[t.id] || null;
 function alinBadge(t){
   const a = alinDe(t); if(!a) return "";
   const total = Object.keys(a.campos||{}).length || 4;
   return `<span class="bdg alin" title="Alinhamento: ${a.preenchidos} de ${total} campos preenchidos${a.por?" · último por "+a.por:""}">🤝 ${a.preenchidos}/${total}</span>`;
+}
+const alinMetaTxt = j => j && j.existe
+  ? `por ${j.updated_by||"—"}${j.updated_at?" em "+new Date(j.updated_at).toLocaleString("pt-BR"):""}`
+  : "ainda não gravado";
+
+/* Seção inline — mesma casca visual das outras seções do drawer. */
+function alinSecHtml(campo){
+  const d = ALIN_DEF[campo];
+  return `
+    <div class="sec" id="sec_${d.slug}"><h4>${d.n} · ${d.titulo}
+      ${d.interno?`<span class="alin-lock" style="margin-left:6px">🔒 INTERNO</span>`:""}
+      <span class="ln"></span></h4>
+      <div style="font-size:11.5px;color:var(--muted);margin:-3px 0 7px">${d.hint}</div>
+      <textarea class="alintxt ${d.interno?"interno":""}" id="ai_${d.slug}" disabled
+                placeholder="${d.ph}"></textarea>
+      <div class="alinbar">
+        <span class="m" id="m_${d.slug}">Carregando…</span>
+        <button class="btn btn-roxo" id="btnAi_${d.slug}">💾 Gravar</button>
+      </div>
+    </div>`;
+}
+
+/* Um único ponto de verdade: quem grava (inline ou modal) chama isto e as duas
+   telas + o badge do card passam a refletir o mesmo registro. */
+function alinAplica(t, j){
+  alinCache[t.uuid] = j;
+  const campos = {};
+  Object.keys(ALIN_DEF).forEach(c=>{
+    if(c==="argumentacao_interna" && !j.ve_interno) return;
+    campos[c] = !!String(j[c]||"").trim();
+  });
+  const resumo = {preenchidos:Object.values(campos).filter(Boolean).length,
+                  campos, por:j.updated_by, ts:j.updated_at};
+  // só mexe no board se o resumo realmente mudou — abrir um drawer não deve
+  // custar um re-render de todos os cards.
+  const mudou = JSON.stringify(alinMap[t.uuid]||null) !== JSON.stringify(resumo.preenchidos?resumo:null);
+  if(resumo.preenchidos){ alinMap[t.uuid] = resumo; if(t.id) alinMap[t.id] = resumo; }
+  else { delete alinMap[t.uuid]; if(t.id) delete alinMap[t.id]; }
+  // espelha nos campos inline (se o drawer é deste ticket)
+  if(openUuid === t.uuid){
+    Object.entries(ALIN_DEF).forEach(([campo,d])=>{
+      const el = $("#ai_"+d.slug); if(!el) return;
+      el.value = j[campo]||""; el.disabled = false;
+      const sec = $("#sec_"+d.slug);
+      if(sec) sec.style.display = (d.interno && !j.ve_interno) ? "none" : "";
+      const m = $("#m_"+d.slug); if(m) m.textContent = alinMetaTxt(j);
+    });
+  }
+  // espelha no modal (se aberto neste ticket)
+  if(alinUuid === t.uuid){
+    Object.entries(ALIN_IDS).forEach(([campo,sel])=>{
+      const el = $(sel); if(el){ el.value = j[campo]||""; el.disabled = false; }
+    });
+    $("#alinSecArg").style.display = j.ve_interno ? "" : "none";
+    $("#alinMeta").textContent = j.existe ? "Última alteração "+alinMetaTxt(j)
+                                          : "Nenhum alinhamento gravado ainda para este GAP.";
+  }
+  if(mudou) render();
+}
+
+async function alinCarrega(t, force){
+  if(!force && alinCache[t.uuid]) return alinCache[t.uuid];
+  const j = await api(`/api/alinhamento/${t.uuid}`);
+  alinCache[t.uuid] = j;
+  return j;
+}
+
+/* Chamado no bindBody: enche os 4 campos inline do drawer recém-aberto. */
+async function alinFillInline(t){
+  try{
+    alinAplica(t, await alinCarrega(t));
+  }catch(e){
+    Object.values(ALIN_DEF).forEach(d=>{
+      const el=$("#ai_"+d.slug); if(el) el.disabled=false;
+      const m=$("#m_"+d.slug); if(m) m.textContent="Falha ao carregar: "+e.message;
+    });
+  }
+}
+
+/* Grava UM campo (botão inline). O backend faz upsert parcial, então gravar o
+   retorno não encosta na argumentação que outra pessoa esteja escrevendo. */
+async function alinSalvarCampo(t, campo){
+  const d = ALIN_DEF[campo], el = $("#ai_"+d.slug), b = $("#btnAi_"+d.slug);
+  if(!el || !b) return;
+  b.disabled = true; const old = b.textContent; b.textContent = "⏳ Gravando…";
+  try{
+    const j = await api(`/api/alinhamento/${t.uuid}`,{method:"POST",
+      headers:{"Content-Type":"application/json"},
+      body:JSON.stringify({[campo]: el.value.trim()})});
+    alinAplica(t, j);
+    toast(`#${t.id} — ${d.titulo.toLowerCase()} gravado ✓`,"ok");
+  }catch(e){ toast("Falha ao gravar: "+e.message,"err"); }
+  b.disabled = false; b.textContent = old;
 }
 
 async function openAlin(uuid){
@@ -676,31 +803,21 @@ async function openAlin(uuid){
   Object.values(ALIN_IDS).forEach(sel=>{ $(sel).value=""; $(sel).disabled=true; });
   $("#alinMeta").textContent = "Carregando…";
   $("#alinBg").classList.add("open");
-  try{
-    const j = await api(`/api/alinhamento/${uuid}`);
-    // Perfil 'cliente' não recebe a argumentação interna — some a seção inteira,
-    // em vez de mostrar um campo vazio que ele não pode preencher.
-    $("#alinSecArg").style.display = j.ve_interno ? "" : "none";
-    Object.entries(ALIN_IDS).forEach(([campo, sel])=>{
-      $(sel).value = j[campo] || ""; $(sel).disabled = false;
-    });
-    $("#alinMeta").textContent = j.existe
-      ? `Última alteração por ${j.updated_by||"—"}${j.updated_at?" em "+new Date(j.updated_at).toLocaleString("pt-BR"):""}`
-      : "Nenhum alinhamento gravado ainda para este GAP.";
-  }catch(e){
+  try{ alinAplica(t, await alinCarrega(t, true)); }
+  catch(e){
     $("#alinMeta").textContent = "Falha ao carregar: "+e.message;
     Object.values(ALIN_IDS).forEach(sel=>{ $(sel).disabled=false; });
   }
 }
 function closeAlin(){ $("#alinBg").classList.remove("open"); alinUuid=null; }
 
+/* Grava os quatro de uma vez (botão do modal). */
 async function salvarAlin(){
   if(!alinUuid) return;
-  const t = tickets.find(x=>x.uuid===alinUuid);
+  const t = tickets.find(x=>x.uuid===alinUuid); if(!t) return;
   const body = {};
   Object.entries(ALIN_IDS).forEach(([campo, sel])=>{
-    const el = $(sel);
-    if(el.disabled) return;                       // campo que o perfil não edita
+    const el = $(sel); if(!el || el.disabled) return;
     if(campo==="argumentacao_interna" && $("#alinSecArg").style.display==="none") return;
     body[campo] = el.value.trim();
   });
@@ -709,16 +826,8 @@ async function salvarAlin(){
   try{
     const j = await api(`/api/alinhamento/${alinUuid}`,{method:"POST",
       headers:{"Content-Type":"application/json"}, body:JSON.stringify(body)});
-    const campos = {};
-    Object.keys(ALIN_IDS).forEach(c=>{ if(c in j) campos[c] = !!(j[c]||"").trim(); });
-    if(!j.ve_interno) delete campos.argumentacao_interna;
-    const resumo = {preenchidos:Object.values(campos).filter(Boolean).length,
-                    campos, por:j.updated_by, ts:j.updated_at};
-    alinMap[alinUuid] = resumo;
-    if(t && t.id) alinMap[t.id] = resumo;
-    $("#alinMeta").textContent = `Última alteração por ${j.updated_by||"—"} em ${new Date(j.updated_at||Date.now()).toLocaleString("pt-BR")}`;
-    render();
-    toast(`#${t?t.id:""} — alinhamento gravado ✓`,"ok");
+    alinAplica(t, j);
+    toast(`#${t.id} — alinhamento gravado ✓`,"ok");
   }catch(e){ toast("Falha ao gravar: "+e.message,"err"); }
   b.disabled=false; b.textContent=old;
 }
@@ -759,6 +868,8 @@ function bodyHtml(t){
         </div>
       </div>
     </div>
+    ${alinSecHtml("questionamento_cliente")}
+    ${alinSecHtml("retorno_cliente")}
   </div>
 
   <div class="dcol">
@@ -788,6 +899,7 @@ function bodyHtml(t){
       </div>
       <div id="dTecView"></div>
     </div>
+    ${alinSecHtml("argumentacao_interna")}
     <div class="sec"><h4>Tags <span class="ln"></span></h4>
       <div class="tagrow" id="dTags">${(t.tags||[]).map(tagPill).join("")}</div>
       <div class="addtag">
@@ -799,6 +911,7 @@ function bodyHtml(t){
     <div class="sec"><h4>Decisão da reunião <span class="ln"></span></h4>
       ${decisaoBox(t)}
     </div>
+    ${alinSecHtml("alinhamento_reuniao")}
   </div>
 
   <div class="dcol">
@@ -836,6 +949,11 @@ const tagPill = tg => `<span class="tagpill" data-tag="${esc(tg)}">${esc(tg)} <b
 
 function bindBody(t){
   bindTagAutocomplete(t);
+  Object.keys(ALIN_DEF).forEach(campo=>{
+    const b = $("#btnAi_"+ALIN_DEF[campo].slug);
+    if(b) b.onclick = ()=>alinSalvarCampo(t, campo);
+  });
+  alinFillInline(t);
   // classificação: exclusiva — clicar troca
   $("#dCls").querySelectorAll(".chip").forEach(ch=>{
     ch.onclick = async ()=>{
