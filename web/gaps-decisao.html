@@ -457,7 +457,12 @@ async function loadTickets(){
 
 /* ════════════════ Classificação dos cards ════════════════ */
 const tagsOf = t => (t.tags||[]).map(x=>String(x).toUpperCase());
-const isFoco = t => tagsOf(t).some(tg=>ETAPAS.includes(tg));
+// Portão do radar: um GAP é GAP porque carrega a tag GAP. As outras tags de
+// etapa (LEVANTAR REQUISITOS / LEVANTAMENTO / ORCAMENTO PENDENTE) sozinhas não
+// bastam — LEVANTAMENTO, em especial, também marca levantamento de módulo da
+// implantação, que não é GAP (ex.: DIGITRO "Mód. PCO - Levantamento" 00011240).
+const GAP_TAG = "GAP";
+const isFoco = t => tagsOf(t).includes(GAP_TAG);
 const isGapImplant = t => tagsOf(t).includes("GAP") && tagsOf(t).includes(IMPLANT_TAG);
 const classeOf = t => CLASSES.find(c=>tagsOf(t).includes(c)) || "";
 function colOf(t){
