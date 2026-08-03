@@ -9,6 +9,7 @@
   --navy:#0C2340; --roxo:#6F5BFF; --lilas:#E8E5FF; --cinza:#F4F4F8;
   --gray:#6A6A7B; --gray-light:#9A9AAC; --ink:#2A2A35;
   --approve:#1E9E6A; --phase2:#E8A33D; --workaround:#0099B5; --refuse:#D64550; --pending:#B9B9C8;
+  --entend:#7A5AF8;
   --grad:linear-gradient(135deg,#6F5BFF 0%,#0C2340 100%);
   --font:-apple-system,"Segoe UI",Arial,sans-serif;
 }
@@ -34,6 +35,7 @@ button{font-family:inherit;cursor:pointer}
 .kpi-pill .pct{font-size:9.5px;color:var(--gray-light);margin-top:1px}
 .kpi-pill.approve .val{color:#46D69E} .kpi-pill.phase2 .val{color:#FFC368}
 .kpi-pill.workaround .val{color:#5BD3FF} .kpi-pill.refuse .val{color:#FF7A88}
+.kpi-pill.entend .val{color:#B7A5FF}
 .kpi-pill.pending .val{color:#E6E6F0}
 .tb-progress{width:100%;background:rgba(255,255,255,.08);height:4px;overflow:hidden}
 .tb-progress .fill{height:100%;background:var(--grad);transition:width .3s}
@@ -66,6 +68,7 @@ button{font-family:inherit;cursor:pointer}
 .classif-progress{width:130px;height:6px;background:#EDF1F4;border-radius:4px;overflow:hidden;display:flex}
 .cp-approve{background:var(--approve)} .cp-phase2{background:var(--phase2)}
 .cp-workaround{background:var(--workaround)} .cp-refuse{background:var(--refuse)}
+.cp-entend{background:var(--entend)}
 .classif-progress-meta{font-size:10px;color:var(--gray);font-weight:600}
 .chev{font-size:17px;color:var(--gray);transition:transform .25s}
 .classif.open .chev{transform:rotate(180deg)}
@@ -90,6 +93,7 @@ button{font-family:inherit;cursor:pointer}
 .task.decided-approve{border-left-color:var(--approve);background:linear-gradient(90deg,#F0FAF5,#fff 55%)}
 .task.decided-phase2{border-left-color:var(--phase2);background:linear-gradient(90deg,#FFF7EC,#fff 55%)}
 .task.decided-workaround{border-left-color:var(--workaround);background:linear-gradient(90deg,#E8F7FB,#fff 55%)}
+.task.decided-entend{border-left-color:var(--entend);background:linear-gradient(90deg,#F1EEFF,#fff 55%)}
 .task.decided-refuse{border-left-color:var(--refuse);background:linear-gradient(90deg,#FCEDEF,#fff 55%);opacity:.93}
 .task.hidden{display:none}
 .task-top{display:grid;grid-template-columns:1fr auto;gap:13px;align-items:start}
@@ -113,6 +117,7 @@ button{font-family:inherit;cursor:pointer}
 .btn-approve{border-color:var(--approve);color:var(--approve)} .btn-approve:hover:not(:disabled),.btn-approve.active{background:var(--approve);color:#fff}
 .btn-phase2{border-color:var(--phase2);color:var(--phase2)} .btn-phase2:hover:not(:disabled),.btn-phase2.active{background:var(--phase2);color:#fff}
 .btn-workaround{border-color:var(--workaround);color:var(--workaround)} .btn-workaround:hover:not(:disabled),.btn-workaround.active{background:var(--workaround);color:#fff}
+.btn-entend{border-color:var(--entend);color:var(--entend)} .btn-entend:hover:not(:disabled),.btn-entend.active{background:var(--entend);color:#fff}
 .btn-refuse{border-color:var(--refuse);color:var(--refuse)} .btn-refuse:hover:not(:disabled),.btn-refuse.active{background:var(--refuse);color:#fff}
 .btn-decide.active{color:#fff;box-shadow:0 2px 10px rgba(0,0,0,.12)}
 .btn-detalhes{padding:8px 13px;border:1px dashed #DCE3E8;border-radius:8px;background:transparent;color:var(--gray);font-size:11.5px;font-weight:600;margin-left:auto}
@@ -168,6 +173,7 @@ button{font-family:inherit;cursor:pointer}
 .toast.show{opacity:1;transform:translateX(-50%) translateY(0)}
 .toast.approve{background:var(--approve)} .toast.phase2{background:var(--phase2)}
 .toast.workaround{background:var(--workaround)} .toast.refuse{background:var(--refuse)}
+.toast.entend{background:var(--entend)}
 @media print{.topbar{position:relative}.controls,.fab-bar,.btn-decide,.btn-detalhes,.search-wrap{display:none!important}.classif-body,.group-body,.task-extra{display:block!important}.task{page-break-inside:avoid}}
 @media(max-width:768px){.classif-head{grid-template-columns:auto 1fr auto;gap:10px;padding:13px}.classif-head .classif-stat:nth-of-type(2),.classif-progress-wrap{display:none}.task-top{grid-template-columns:1fr}}
 
@@ -228,6 +234,7 @@ body.so-leitura input[data-est]{pointer-events:none;opacity:.6}
       <div class="kpi-pill approve" data-filter="approve"><span class="lbl">✅ Aprovado</span><span class="val"><span id="kApproveHrs">0</span><span class="u">h</span></span><span class="pct"><span id="kApproveCount">0</span> · <span id="kApprovePct">0%</span></span></div>
       <div class="kpi-pill phase2" data-filter="phase2"><span class="lbl">⏰ 2ª Fase</span><span class="val"><span id="kPhase2Hrs">0</span><span class="u">h</span></span><span class="pct"><span id="kPhase2Count">0</span> · <span id="kPhase2Pct">0%</span></span></div>
       <div class="kpi-pill workaround" data-filter="workaround"><span class="lbl">🛟 Contorno</span><span class="val"><span id="kWorkaroundHrs">0</span><span class="u">h</span></span><span class="pct"><span id="kWorkaroundCount">0</span> · <span id="kWorkaroundPct">0%</span></span></div>
+      <div class="kpi-pill entend" data-filter="entend" title="Entendimento durante o Projeto"><span class="lbl">🔎 Entendimento</span><span class="val"><span id="kEntendHrs">0</span><span class="u">h</span></span><span class="pct"><span id="kEntendCount">0</span> · <span id="kEntendPct">0%</span></span></div>
       <div class="kpi-pill refuse" data-filter="refuse"><span class="lbl">❌ Recusado</span><span class="val"><span id="kRefuseHrs">0</span><span class="u">h</span></span><span class="pct"><span id="kRefuseCount">0</span> · <span id="kRefusePct">0%</span></span></div>
       <div class="kpi-pill pending" data-filter="pending"><span class="lbl">⏳ Pendente</span><span class="val"><span id="kPendingHrs">0</span><span class="u">h</span></span><span class="pct"><span id="kPendingCount">0</span> · <span id="kPendingPct">100%</span></span></div>
     </div>
@@ -274,7 +281,7 @@ body.so-leitura input[data-est]{pointer-events:none;opacity:.6}
 <script>
 "use strict";
 /* ════════ Config / estado ════════ */
-const DEC_LABEL = {approve:"Aprovado",phase2:"2ª Fase",workaround:"Contorno",refuse:"Recusado"};
+const DEC_LABEL = {approve:"Aprovado",phase2:"2ª Fase",workaround:"Contorno",entend:"Entendimento durante o Projeto",refuse:"Recusado"};
 const NECESSIDADES = ["NECESSARIO","PRIORIDADE","DESEJAVEL","OPCIONAL","INDEFINIDO"];
 const CLOSED = new Set(["006","009"]);
 const $  = (s,p=document)=>p.querySelector(s);
@@ -446,6 +453,7 @@ function renderTask(t){
       <button class="btn-decide btn-approve ${d.decision==="approve"?"active":""}" data-action="approve" data-code="${t.id}"><span>✓</span> Aprovar</button>
       <button class="btn-decide btn-phase2 ${d.decision==="phase2"?"active":""}" data-action="phase2" data-code="${t.id}"><span>⏰</span> 2ª Fase</button>
       <button class="btn-decide btn-workaround ${d.decision==="workaround"?"active":""}" data-action="workaround" data-code="${t.id}"><span>🛟</span> Contorno</button>
+      <button class="btn-decide btn-entend ${d.decision==="entend"?"active":""}" data-action="entend" data-code="${t.id}" title="Entendimento durante o Projeto — escopo segue para detalhamento na execução"><span>🔎</span> Entendimento no Projeto</button>
       <button class="btn-decide btn-refuse ${d.decision==="refuse"?"active":""}" data-action="refuse" data-code="${t.id}"><span>✕</span> Recusar</button>
       <button class="btn-detalhes" data-action="toggle" data-code="${t.id}">Ver detalhes ▾</button>
     </div>
@@ -699,7 +707,7 @@ function decide(code, act){
 function applyTask(code){
   const task=$(`.task[data-code="${code}"]`); if(!task) return;
   const d=decisions[code]||{};
-  task.classList.remove("decided-approve","decided-phase2","decided-workaround","decided-refuse");
+  task.classList.remove("decided-approve","decided-phase2","decided-workaround","decided-entend","decided-refuse");
   if(d.decision) task.classList.add(`decided-${d.decision}`);
   $$(".btn-decide",task).forEach(b=>b.classList.toggle("active", b.dataset.action===d.decision));
   if(d.note||d.decision) task.classList.add("has-note");
@@ -709,7 +717,7 @@ function markDirty(){ dirty=true; $("#lastSaved").textContent = "● alteraçõe
 
 /* ════════ KPIs / progresso / filtro ════════ */
 function statFor(list){
-  const s={approve:{h:0,c:0},phase2:{h:0,c:0},workaround:{h:0,c:0},refuse:{h:0,c:0},pending:{h:0,c:0}}; let tot=0;
+  const s={approve:{h:0,c:0},phase2:{h:0,c:0},workaround:{h:0,c:0},entend:{h:0,c:0},refuse:{h:0,c:0},pending:{h:0,c:0}}; let tot=0;
   list.forEach(t=>{ const h=Number(t.time_estimate)||0; tot+=h; const k=(decisions[t.id]||{}).decision||"pending"; (s[k]||s.pending).h+=h; (s[k]||s.pending).c++; });
   return {s,tot};
 }
@@ -717,7 +725,7 @@ function updateKPIs(){
   const {s,tot}=statFor(TASKS);
   $("#kTotalHrs").innerHTML = fmtH(tot)+'<span class="u">h</span>'; $("#kTotalCount").textContent=TASKS.length;
   const set=(k,id)=>{ $(`#k${id}Hrs`).textContent=fmtH(s[k].h); $(`#k${id}Count`).textContent=s[k].c; $(`#k${id}Pct`).textContent= tot?Math.round(s[k].h/tot*100)+"%":"0%"; };
-  set("approve","Approve"); set("phase2","Phase2"); set("workaround","Workaround"); set("refuse","Refuse"); set("pending","Pending");
+  set("approve","Approve"); set("phase2","Phase2"); set("workaround","Workaround"); set("entend","Entend"); set("refuse","Refuse"); set("pending","Pending");
   // progress por classif/grupo
   $$(".classif").forEach(card=>{
     const codes=$$(".task",card).map(t=>t.dataset.code);
@@ -728,10 +736,10 @@ function updateKPIs(){
 function paintProg(bar, meta, codes){
   if(!bar) return; const list=codes.map(c=>TASKS.find(t=>t.id===c)).filter(Boolean); const {s,tot}=statFor(list);
   const seg=k=>tot?(s[k].h/tot*100):0;
-  bar.innerHTML = `<div class="cp-approve" style="width:${seg("approve")}%"></div><div class="cp-phase2" style="width:${seg("phase2")}%"></div><div class="cp-workaround" style="width:${seg("workaround")}%"></div><div class="cp-refuse" style="width:${seg("refuse")}%"></div>`;
-  if(meta){ const dec=s.approve.c+s.phase2.c+s.workaround.c+s.refuse.c; meta.textContent=`${Math.round(dec/list.length*100||0)}% decidido`; }
+  bar.innerHTML = `<div class="cp-approve" style="width:${seg("approve")}%"></div><div class="cp-phase2" style="width:${seg("phase2")}%"></div><div class="cp-workaround" style="width:${seg("workaround")}%"></div><div class="cp-entend" style="width:${seg("entend")}%"></div><div class="cp-refuse" style="width:${seg("refuse")}%"></div>`;
+  if(meta){ const dec=s.approve.c+s.phase2.c+s.workaround.c+s.entend.c+s.refuse.c; meta.textContent=`${Math.round(dec/list.length*100||0)}% decidido`; }
 }
-function updateProgress(){ const {s}=statFor(TASKS); const dec=s.approve.c+s.phase2.c+s.workaround.c+s.refuse.c; $("#progressFill").style.width=(TASKS.length?dec/TASKS.length*100:0)+"%"; }
+function updateProgress(){ const {s}=statFor(TASKS); const dec=s.approve.c+s.phase2.c+s.workaround.c+s.entend.c+s.refuse.c; $("#progressFill").style.width=(TASKS.length?dec/TASKS.length*100:0)+"%"; }
 function applyFilter(){
   const term=searchTerm.toLowerCase();
   $$(".task").forEach(task=>{
@@ -771,7 +779,7 @@ const hoje=()=>new Date().toISOString().slice(0,10);
 function summary(){
   const {s,tot}=statFor(TASKS);
   const ln=(k,l)=>`${l}: ${s[k].c} GAPs · ${fmtH(s[k].h)}h (${tot?Math.round(s[k].h/tot*100):0}%)`;
-  alert(`RESUMO — ${clienteNome}\n\nTotal: ${TASKS.length} GAPs · ${fmtH(tot)}h\n\n✅ ${ln("approve","Aprovado")}\n⏰ ${ln("phase2","2ª Fase")}\n🛟 ${ln("workaround","Contorno")}\n❌ ${ln("refuse","Recusado")}\n⏳ ${ln("pending","Pendente")}`);
+  alert(`RESUMO — ${clienteNome}\n\nTotal: ${TASKS.length} GAPs · ${fmtH(tot)}h\n\n✅ ${ln("approve","Aprovado")}\n⏰ ${ln("phase2","2ª Fase")}\n🛟 ${ln("workaround","Contorno")}\n🔎 ${ln("entend","Entendimento durante o Projeto")}\n❌ ${ln("refuse","Recusado")}\n⏳ ${ln("pending","Pendente")}`);
 }
 
 /* ════════ Listeners globais ════════ */

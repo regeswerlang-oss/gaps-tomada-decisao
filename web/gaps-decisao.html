@@ -239,11 +239,13 @@ body.so-leitura #btnAddTag{display:none}
 .decbox.approve{border-left-color:#1E9E6A;background:#EFFAF4}
 .decbox.phase2{border-left-color:#E8A33D;background:#FFF8EC}
 .decbox.workaround{border-left-color:#0099B5;background:#EAF8FC}
+.decbox.entend{border-left-color:#7A5AF8;background:#F1EEFF}
 .decbox.refuse{border-left-color:#D64550;background:#FDF0F1}
 .decbox .dtop{display:flex;align-items:center;gap:8px;flex-wrap:wrap}
 .decpill{font-size:11px;font-weight:800;border-radius:20px;padding:3px 11px;color:#fff}
 .decpill.approve{background:#1E9E6A} .decpill.phase2{background:#E8A33D}
 .decpill.workaround{background:#0099B5} .decpill.refuse{background:#D64550}
+.decpill.entend{background:#7A5AF8}
 .decbox .dmeta{font-size:11px;color:var(--muted);margin-left:auto}
 .decbox .dnota{margin-top:9px;font-size:12.5px;line-height:1.5;white-space:pre-wrap;
   background:#fff;border:1px solid rgba(0,0,0,.06);border-radius:8px;padding:9px 11px}
@@ -937,7 +939,7 @@ function bodyHtml(t){
     </div>
   </div>`;
 }
-const DEC_LBL = {approve:"✓ Aprovado", phase2:"⏰ 2ª Fase", workaround:"🛟 Contorno", refuse:"✕ Recusado"};
+const DEC_LBL = {approve:"✓ Aprovado", phase2:"⏰ 2ª Fase", workaround:"🛟 Contorno", entend:"🔎 Entendimento durante o Projeto", refuse:"✕ Recusado"};
 // Mostra o que foi decidido na tela de Reunião (cockpit.decisoes): a decisão, a
 // observação do cliente e a estimativa combinada. Só leitura — decidir é lá.
 function decisaoBox(t){

@@ -1237,9 +1237,11 @@ def api_tickets():
 # Decisões — Supabase (paridade: substitui o decisoes_<cliente>.json local)
 # ─────────────────────────────────────────────────────────────────────────────
 _DEC_DB2UI = {"aprovar": "approve", "segunda_fase": "phase2",
-              "contorno": "workaround", "recusar": "refuse", "pendente": None}
+              "contorno": "workaround", "entendimento_projeto": "entend",
+              "recusar": "refuse", "pendente": None}
 _DEC_UI2DB = {"approve": "aprovar", "phase2": "segunda_fase",
-              "workaround": "contorno", "refuse": "recusar",
+              "workaround": "contorno", "entend": "entendimento_projeto",
+              "refuse": "recusar",
               None: "pendente", "": "pendente"}
 
 
