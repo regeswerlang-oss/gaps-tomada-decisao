@@ -44,6 +44,7 @@ header input::placeholder{color:#9FB2CC}
 .chip[data-onlysemest].on{border-color:var(--danger);background:#FBEAEA;color:var(--danger)}
 .chip[data-onlypendcons].on{border-color:#A06B00;background:#FFF3DD;color:#A06B00}
 .chip[data-onlygapimplant].on{border-color:#B23B3B;background:#FDE2E2;color:#B23B3B}
+.chip[data-onlygapprojeto].on{border-color:#0F7B6C;background:#DCF2EE;color:#0F7B6C}
 .tagfilter{position:relative;display:inline-block}
 .tagfilter #tagFilterCount{background:var(--roxo);color:#fff;border-radius:9px;padding:0 6px;font-size:10px;margin-left:2px}
 .tagfilter-pop{display:none;position:absolute;top:calc(100% + 6px);left:0;z-index:45;background:#fff;border:1px solid #D8D8E4;border-radius:10px;box-shadow:0 8px 28px rgba(12,35,64,.18);width:280px;padding:10px}
@@ -302,6 +303,7 @@ body.so-leitura #btnAddTag{display:none}
   <button class="chip" id="chipRestTec" data-onlyresttec>🔧 Restrição Técnica</button>
   <button class="chip" id="chipSemEst" data-onlysemest>⏱ Sem estimativa</button>
   <button class="chip" id="chipGapImplant" data-onlygapimplant title="GAP que também tem a tag IMPLANTAÇÃO — surgiu durante a implantação, possível conflito RFP × GAP">🧩 GAP + Implantação</button>
+  <button class="chip" id="chipGapProjeto" data-onlygapprojeto title="GAP que também tem a tag PROJETO — está dentro do escopo do projeto (a tag EXTRA PROJETO fica de fora)">🗂️ GAP + Projeto</button>
   <label><input type="checkbox" id="chkClosed"> mostrar resolvidos/cancelados</label>
 </div>
 
@@ -398,12 +400,16 @@ let histCache = {};        // uuid → items
 let tagCatalog = [];       // [{id,tag}]
 let etapasOn = new Set(ETAPAS);
 let clsOn = new Set();     // vazio = todas
-let busca = "", showClosed = false, onlySemEst = false, onlyPendCons = false, onlyRestTec = false, onlyGapImplant = false;
+let busca = "", showClosed = false, onlySemEst = false, onlyPendCons = false, onlyRestTec = false, onlyGapImplant = false, onlyGapProjeto = false;
 // Conceito "GAP + Implantação": GAP que carrega também a tag IMPLANTAÇÃO —
 // nasceu durante a implantação, então é candidato a conflito RFP × GAP (vendido
 // como nativo/atende na proposta e virou desenvolvimento). Ver
 // Dashboard Serviço × Comercial (svc_comercial) para o conceito irmão.
 const IMPLANT_TAG = "IMPLANTAÇÃO";
+// Conceito "GAP + Projeto": GAP que carrega também a tag PROJETO — está dentro do
+// escopo contratado. Comparação exata, então EXTRA PROJETO (o oposto: fora do
+// escopo) NÃO entra neste filtro.
+const PROJETO_TAG = "PROJETO";
 let tagFilterSel = new Set();   // tags selecionadas no filtro múltiplo
 let tagFilterMode = "and";      // "and" = contém todas · "or" = contém qualquer
 const PEND_CONS_TAG = "PENDENCIA CONSULTOR";
@@ -464,6 +470,7 @@ const tagsOf = t => (t.tags||[]).map(x=>String(x).toUpperCase());
 const GAP_TAG = "GAP";
 const isFoco = t => tagsOf(t).includes(GAP_TAG);
 const isGapImplant = t => tagsOf(t).includes("GAP") && tagsOf(t).includes(IMPLANT_TAG);
+const isGapProjeto = t => tagsOf(t).includes(GAP_TAG) && tagsOf(t).includes(PROJETO_TAG);
 const classeOf = t => CLASSES.find(c=>tagsOf(t).includes(c)) || "";
 function colOf(t){
   const tg = tagsOf(t);
@@ -494,6 +501,7 @@ function visiveis(){
     if(onlyPendCons && !tagsOf(t).includes(PEND_CONS_TAG)) return false;
     if(onlyRestTec && !tagsOf(t).includes(REST_TEC_TAG)) return false;
     if(onlyGapImplant && !isGapImplant(t)) return false;
+    if(onlyGapProjeto && !isGapProjeto(t)) return false;
     if(tagFilterSel.size){
       const tg = tagsOf(t);
       const ok = tagFilterMode==="or"
@@ -1423,6 +1431,7 @@ $("#filters").addEventListener("click", ev=>{
   if(b.hasAttribute("data-onlypendcons")) onlyPendCons = b.classList.contains("on");
   if(b.hasAttribute("data-onlyresttec")) onlyRestTec = b.classList.contains("on");
   if(b.hasAttribute("data-onlygapimplant")) onlyGapImplant = b.classList.contains("on");
+  if(b.hasAttribute("data-onlygapprojeto")) onlyGapProjeto = b.classList.contains("on");
   render();
 });
 
