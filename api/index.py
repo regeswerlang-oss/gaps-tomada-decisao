@@ -60,7 +60,8 @@ Base de Conhecimento Protheus (kb.html — Módulo → Assunto → Artigo, por c
   GET  /api/kb/publico/<token>/artigos     → artigos publicados do dono do token
 
 Tasks SC (ao vivo) — exigem login
-  GET  /api/ticket/<uuid>                  → detalhe do ticket
+  GET  /api/ticket/<uuid>[?tags=1]         → detalhe do ticket (tags=1: tags ao
+                                             vivo + espelho + catálogo)
   GET  /api/ticket/<uuid>/history          → histórico (+ NOTEBOOKLM:/PERSONALIZACAO:)
   GET  /api/tags-catalog[?search=]         → catálogo de tags
   POST /api/ticket/<uuid>/update           → GET→merge→PUT + espelho no Supabase
@@ -586,6 +587,37 @@ def _find_tag_id(nome):
             mp[alvo] = tid
             return tid
     return None
+
+
+def _catalog_upsert(items):
+    """Grava em `cockpit.tags_catalogo` as tags cruas vindas do Tasks SC
+    (`[{id, tag}]`) e devolve os NOMES que ainda não estavam no catálogo.
+
+    É como uma tag nova nascida em QUALQUER ticket passa a existir para todos os
+    outros (autocomplete do painel de tags), sem esperar o `POST /api/tags/sync`.
+    """
+    pares, vistos = [], set()
+    for t in (items or []):
+        tid, nome = t.get("id"), str(t.get("tag") or "").strip()
+        if not tid or not nome or tid in vistos:
+            continue
+        vistos.add(tid)
+        pares.append((tid, nome))
+    if not pares:
+        return []
+    mp = _tags_catalog_map()
+    novas = [n for _i, n in pares if n.upper() not in mp]
+    try:
+        with db() as c, c.cursor() as cur:
+            psycopg2.extras.execute_values(cur, """
+                insert into cockpit.tags_catalogo (id, tag, synced_at) values %s
+                on conflict (id) do update set tag=excluded.tag, synced_at=now()
+            """, pares, template="(%s,%s,now())", page_size=200)
+    except Exception:
+        return []
+    if novas:
+        _TAG_CATALOG_CACHE["map"] = None      # invalida: a próxima leitura relê
+    return novas
 
 
 def _resolve_tag_ids(values, current_tag_items):
@@ -1937,7 +1969,25 @@ def api_ticket_detail(uuid):
     items = (data.get("items") or []) if isinstance(data, dict) else []
     if not items:
         return _err(404, "Ticket não encontrado.")
-    return _json({"ok": True, "ticket": items[0]})
+    out = {"ok": True, "ticket": items[0]}
+    # ?tags=1 — é o que o botão 🔄 Sincronizar usa. O GET /tickets/<uuid> não
+    # devolve os NOMES das tags (o board vive de cockpit.ticket_tags, que só o
+    # sync periódico atualizava). Aqui puxamos as tags ao vivo, espelhamos no
+    # ticket e alimentamos o catálogo com o que for tag nova — assim ela fica
+    # disponível no autocomplete dos demais tickets na hora.
+    if request.args.get("tags") in ("1", "true", "sim"):
+        tdata, tcode, terr = tasks_request("GET", f"/tickets/tags/{uuid}")
+        if tcode == 200 and isinstance(tdata, dict):
+            titems = [t for t in (tdata.get("items") or [])
+                      if str(t.get("tag") or "").strip()]
+            out["tags"] = [str(t["tag"]).strip() for t in titems]
+            out["tags_items"] = [{"id": t.get("id"), "tag": str(t["tag"]).strip()}
+                                 for t in titems]
+            out["tags_novas"] = _catalog_upsert(titems)   # entram no catálogo
+            _resync_tags(uuid, titems)                    # espelha no ticket
+        else:
+            out["tags_erro"] = terr or f"HTTP {tcode}"
+    return _json(out)
 
 
 @app.get("/api/ticket/<uuid>/history")
@@ -2135,13 +2185,19 @@ def _mirror_ticket(uuid, changes):
         _resync_tags(uuid)
 
 
-def _resync_tags(uuid):
-    """Após alterar tags no Tasks SC, reescreve cockpit.ticket_tags."""
+def _resync_tags(uuid, items=None):
+    """Após alterar/reler tags no Tasks SC, reescreve cockpit.ticket_tags.
+
+    `items` = a resposta crua de `/tickets/tags/<uuid>` já em mãos (evita uma
+    segunda chamada à API quando quem chama acabou de buscá-la).
+    """
     try:
-        tdata, tcode, _ = tasks_request("GET", f"/tickets/tags/{uuid}")
-        if tcode != 200:
-            return
-        names = [(t.get("tag") or "").strip() for t in (tdata.get("items") or [])]
+        if items is None:
+            tdata, tcode, _ = tasks_request("GET", f"/tickets/tags/{uuid}")
+            if tcode != 200:
+                return
+            items = tdata.get("items") or []
+        names = [(t.get("tag") or "").strip() for t in items]
         names = [n for n in names if n]
         with db() as conn:
             with conn.cursor() as cur:

@@ -1204,22 +1204,41 @@ async function syncDrawer(){
   const b = $("#btnSync"); b.disabled = true; const old = b.textContent; b.textContent = "⏳ Sincronizando…";
   $("#dMsg").textContent = "Buscando atualização na API…";
   try{
-    const jd = await api(`/api/ticket/${t.uuid}`);
+    const jd = await api(`/api/ticket/${t.uuid}?tags=1`);
     const fresh = jd.ticket || {};
-    // mescla campos relevantes no objeto do board (reflete no card também)
-    ["tags","time_estimate","time_spent","status","status_description","due_date",
+    // mescla campos relevantes no objeto do board (reflete no card também).
+    // "tags" NÃO entra aqui: o detalhe do Tasks SC devolve ids, não nomes — os
+    // nomes vêm de jd.tags (rota com ?tags=1), que é a verdade do board.
+    ["time_estimate","time_spent","status","status_description","due_date",
      "title","description","user_assigned_description","assigned_customer_description",
      "service_description","activity_description","project_description",
      "update_date","update_time","update_user","milestone","priority","progress"]
       .forEach(k=>{ if(k in fresh) t[k]=fresh[k]; });
+    // tags ao vivo: o backend já espelhou em cockpit.ticket_tags e gravou as
+    // tags novas no catálogo — aqui só refletimos na tela.
+    if(Array.isArray(jd.tags)) t.tags = jd.tags;
+    const novas = jd.tags_novas || [];
+    if(Array.isArray(jd.tags_items) && jd.tags_items.length){
+      const jaCat = new Set(tagCatalog.map(x=>String(x.tag||"").toUpperCase()));
+      jd.tags_items.forEach(x=>{
+        const nm = String(x.tag||"").trim();
+        if(nm && !jaCat.has(nm.toUpperCase())){ tagCatalog.push({id:x.id, tag:nm}); jaCat.add(nm.toUpperCase()); }
+      });
+      tagCatalog.sort((a,b)=>String(a.tag).localeCompare(String(b.tag),"pt-BR"));
+      fillTagDatalist();
+    }
     detailCache[t.uuid] = fresh;
     // força releitura de histórico/NLM/especificação
     delete nlmCache[t.uuid]; delete histCache[t.uuid]; delete tecCache[t.uuid];
     // reconstrói o painel inteiro com os dados frescos (inclui Drive via renderDocsExtra)
     openDrawer(t.uuid);
     render();   // atualiza o board (badges, estimativa, tags)
-    $("#dMsg").textContent = "Sincronizado às " + new Date().toLocaleTimeString("pt-BR");
-    toast(`#${t.id} sincronizado com a API ✓`,"ok");
+    $("#dMsg").textContent = "Sincronizado às " + new Date().toLocaleTimeString("pt-BR")
+      + (Array.isArray(jd.tags) ? ` · ${jd.tags.length} tag(s)` : "")
+      + (novas.length ? ` · ${novas.length} nova(s) no catálogo` : "");
+    toast(novas.length
+      ? `#${t.id} sincronizado ✓ — tag(s) nova(s) no catálogo: ${novas.join(", ")}`
+      : `#${t.id} sincronizado com a API ✓`, "ok");
   }catch(e){
     $("#dMsg").textContent = "";
     toast("Falha ao sincronizar: "+e.message,"err");
