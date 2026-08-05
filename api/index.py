@@ -70,13 +70,19 @@ Tasks SC (ao vivo) — exigem login
 
 Gmail
   GET  /api/gmail/health                   → status do modo de rascunho
-  POST /api/gmail/draft                    → salva rascunho em cockpit.email_drafts
+  GET  /api/gmail/credencial               → a conta Gmail conectada (sem a senha)
+  POST /api/gmail/credencial               → conecta (valida por IMAP antes de gravar)
+  POST /api/gmail/credencial/remover       → desconecta
+  POST /api/gmail/draft                    → rascunho no Gmail do usuário (IMAP
+                                             APPEND); sem credencial, cai em
+                                             cockpit.email_drafts
 """
 from __future__ import annotations
 
 import base64
 import hashlib
 import hmac
+import imaplib
 import json
 import os
 import re
@@ -2335,14 +2341,177 @@ def api_refresh():
 
 
 # ─────────────────────────────────────────────────────────────────────────────
-# Gmail — salva rascunho em cockpit.email_drafts (modo Vercel-native)
+# Gmail — rascunho DE VERDADE na caixa do usuário, via IMAP APPEND
+#
+# Por que IMAP e não a Gmail API: o gmail_server.py do totvs-dashboard já fazia
+# assim (App Password de 16 caracteres + APPEND na pasta de Rascunhos) e isso
+# dispensa Google Cloud, OAuth, tela de consentimento e refresh token. Cada
+# usuário guarda a PRÓPRIA credencial (cockpit.gmail_credenciais, senha cifrada)
+# para o rascunho nascer na caixa certa, com o remetente certo.
+# Sem credencial, cai no modo antigo: salva em cockpit.email_drafts.
 # ─────────────────────────────────────────────────────────────────────────────
+IMAP_HOST = os.environ.get("GMAIL_IMAP_HOST", "imap.gmail.com")
+IMAP_PORT = int(os.environ.get("GMAIL_IMAP_PORT", "993"))
+
+
+def _fernet():
+    """Chave derivada do SESSION_SECRET — não exige env var nova. Trocar o
+    SESSION_SECRET invalida as senhas guardadas (é preciso reconectar)."""
+    from cryptography.fernet import Fernet          # import tardio: só quem usa paga
+    key = base64.urlsafe_b64encode(
+        hashlib.sha256(("gmail-cred:" + SESSION_SECRET).encode()).digest())
+    return Fernet(key)
+
+
+def _cred_get(usuario):
+    """{gmail_email, app_password} do usuário, decifrado. None se não tem."""
+    row = q("select gmail_email, senha_cif from cockpit.gmail_credenciais where usuario=%s",
+            (usuario,), one=True)
+    if not row:
+        return None
+    try:
+        senha = _fernet().decrypt(row["senha_cif"].encode()).decode()
+    except Exception:
+        return None            # SESSION_SECRET mudou ou registro corrompido
+    return {"gmail_email": row["gmail_email"], "app_password": senha}
+
+
+def _imap_login(gmail_email, app_password, timeout=20):
+    m = imaplib.IMAP4_SSL(IMAP_HOST, IMAP_PORT, timeout=timeout)
+    m.login(gmail_email, str(app_password).replace(" ", ""))   # o Google mostra a senha em blocos de 4
+    return m
+
+
+def _drafts_folder(mail):
+    """Acha a pasta de Rascunhos independente do idioma da conta: primeiro pela
+    flag especial \\Drafts do LIST, depois pelos nomes conhecidos."""
+    try:
+        typ, data = mail.list()
+        if typ == "OK":
+            for raw in data or []:
+                line = raw.decode("utf-8", "ignore") if isinstance(raw, (bytes, bytearray)) else str(raw)
+                if "\\Drafts" in line:
+                    m = re.search(r'"([^"]+)"\s*$', line)
+                    if m:
+                        return m.group(1)
+    except Exception:
+        pass
+    return "[Gmail]/Drafts"
+
+
+def _gmail_draft_imap(cred, to, cc, subject, body_html):
+    """Cria o rascunho. Devolve (info, erro)."""
+    from email.mime.text import MIMEText
+    from email.mime.multipart import MIMEMultipart
+    from email.utils import formatdate, make_msgid
+
+    remetente = cred["gmail_email"]
+    msg = MIMEMultipart("alternative")
+    msg["From"] = remetente
+    if to:
+        msg["To"] = to
+    if cc:
+        msg["Cc"] = cc
+    msg["Subject"] = (subject or "").strip() or "(sem assunto)"
+    msg["Date"] = formatdate(localtime=True)
+    msg["Message-ID"] = make_msgid()
+    texto = _strip_html(body_html or "").strip() or "(conteúdo em HTML — abra no Gmail para ver)"
+    msg.attach(MIMEText(texto, "plain", "utf-8"))
+    msg.attach(MIMEText(body_html or "", "html", "utf-8"))
+    raw = msg.as_bytes()
+
+    try:
+        mail = _imap_login(remetente, cred["app_password"])
+    except Exception as e:
+        return None, f"login IMAP falhou: {e}"
+    try:
+        pasta = _drafts_folder(mail)
+        typ, resp = mail.append(f'"{pasta}"', "(\\Draft)",
+                                imaplib.Time2Internaldate(time.time()), raw)
+        if typ != "OK":
+            return None, f"APPEND falhou: {resp!r}"
+        return {"folder": pasta, "bytes": len(raw), "from": remetente}, None
+    except Exception as e:
+        return None, str(e)
+    finally:
+        try:
+            mail.logout()
+        except Exception:
+            pass
+
+
 @app.get("/api/gmail/health")
 def api_gmail_health():
     if (r := require_auth()):
         return r
-    return _json({"ok": True, "configured": True, "mode": "draft-store",
-                  "info": "Rascunhos são salvos em cockpit.email_drafts."})
+    cred = _cred_get(current_user())
+    return _json({"ok": True, "configured": True,
+                  "mode": "imap-draft" if cred else "draft-store",
+                  "gmail_conectado": bool(cred),
+                  "gmail_email": cred["gmail_email"] if cred else None,
+                  "info": ("Rascunhos vão para a sua caixa do Gmail." if cred else
+                           "Sem credencial Gmail: os rascunhos ficam em cockpit.email_drafts. "
+                           "Conecte a sua conta em Minha Conta.")})
+
+
+@app.get("/api/gmail/credencial")
+def api_gmail_cred_get():
+    if (r := require_auth()):
+        return r
+    row = q("""select gmail_email, validado_em, updated_at
+                 from cockpit.gmail_credenciais where usuario=%s""",
+            (current_user(),), one=True)
+    return _json({"ok": True, "configurado": bool(row),
+                  "gmail_email": row["gmail_email"] if row else None,
+                  "validado_em": str(row["validado_em"]) if row and row["validado_em"] else None})
+
+
+@app.post("/api/gmail/credencial")
+def api_gmail_cred_set():
+    """Salva a credencial DEPOIS de provar que ela funciona (login IMAP real).
+    Melhor descobrir aqui do que na hora de gerar o rascunho."""
+    if (r := require_auth()):
+        return r
+    if (w := require_write()):
+        return w
+    if (sim := deny_simulacao()):
+        return sim
+    body = request.get_json(silent=True) or {}
+    email_gmail = str(body.get("gmail_email") or "").strip()
+    senha = str(body.get("app_password") or "").replace(" ", "").strip()
+    if not email_gmail or "@" not in email_gmail:
+        return _err(400, "Informe o endereço Gmail.")
+    if len(senha) < 16:
+        return _err(400, "A App Password do Google tem 16 caracteres. "
+                         "Gere em https://myaccount.google.com/apppasswords (exige 2FA ligado).")
+    try:
+        m = _imap_login(email_gmail, senha, timeout=15)
+        m.logout()
+    except Exception as e:
+        return _err(400, f"O Gmail recusou essa credencial: {e}. Confira o e-mail e "
+                         f"use uma App Password (a senha normal da conta não serve).")
+    try:
+        cif = _fernet().encrypt(senha.encode()).decode()
+    except Exception as e:
+        return _err(500, f"Falha cifrando a senha: {e}")
+    execute("""insert into cockpit.gmail_credenciais
+                 (usuario, gmail_email, senha_cif, validado_em, updated_at)
+               values (%s,%s,%s,now(),now())
+               on conflict (usuario) do update
+                 set gmail_email=excluded.gmail_email, senha_cif=excluded.senha_cif,
+                     validado_em=now(), updated_at=now()""",
+            (current_user(), email_gmail, cif))
+    return _json({"ok": True, "gmail_email": email_gmail})
+
+
+@app.post("/api/gmail/credencial/remover")
+def api_gmail_cred_del():
+    if (r := require_auth()):
+        return r
+    if (sim := deny_simulacao()):
+        return sim
+    execute("delete from cockpit.gmail_credenciais where usuario=%s", (current_user(),))
+    return _json({"ok": True})
 
 
 @app.post("/api/gmail/draft")
@@ -2358,21 +2527,39 @@ def api_gmail_draft():
     if _u and (g := deny_uuid(_u)):
         return g
     tipo = body.get("tipo") or "custom"
-    if tipo not in ("cobrar_cliente", "confirmar_andamento", "cobrar_responsavel", "custom"):
+    if tipo not in ("cobrar_cliente", "confirmar_andamento", "cobrar_responsavel",
+                    "gaps_filtrados", "custom"):
         tipo = "custom"
+    to = body.get("destinatario") or body.get("to") or ""
+    cc = body.get("cc") or ""
+    assunto = body.get("assunto") or body.get("subject") or ""
+    # bodyHtml estava de fora desta lista — o board mandava esse nome e o corpo
+    # era gravado como NULL. Aceita todos os apelidos usados pelas telas.
+    corpo = (body.get("corpo_html") or body.get("bodyHtml")
+             or body.get("body") or body.get("html") or "")
+
     row = q("""
         insert into cockpit.email_drafts
           (uuid_ticket, tipo, destinatario, assunto, corpo_html, status, created_by)
         values (%s,%s,%s,%s,%s,'rascunho',%s)
         returning id
-    """, (body.get("uuid_ticket") or body.get("uuid"), tipo,
-          body.get("destinatario") or body.get("to"),
-          body.get("assunto") or body.get("subject"),
-          body.get("corpo_html") or body.get("body") or body.get("html"),
-          current_user()), one=True)
-    return _json({"ok": True, "id": row["id"] if row else None,
-                  "mode": "saved-to-db",
-                  "info": "Rascunho salvo. Envio real via Gmail API fica para a v2."})
+    """, (_u, tipo, to, assunto, corpo, current_user()), one=True)
+    draft_id = row["id"] if row else None
+
+    cred = _cred_get(current_user())
+    if not cred:
+        return _json({"ok": True, "id": draft_id, "mode": "saved-to-db",
+                      "gmail": False,
+                      "info": "Rascunho salvo no banco. Para ele nascer direto no seu Gmail, "
+                              "conecte a sua conta em Minha Conta → Gmail."})
+    info, erro = _gmail_draft_imap(cred, to, cc, assunto, corpo)
+    if erro:
+        return _json({"ok": True, "id": draft_id, "mode": "saved-to-db",
+                      "gmail": False, "gmail_erro": erro,
+                      "info": f"Rascunho salvo no banco, mas o Gmail recusou: {erro}"})
+    return _json({"ok": True, "id": draft_id, "mode": "imap-draft", "gmail": True,
+                  "detalhe": info,
+                  "info": "Rascunho criado no seu Gmail — abra os Rascunhos para revisar e enviar."})
 
 
 # ─────────────────────────────────────────────────────────────────────────────

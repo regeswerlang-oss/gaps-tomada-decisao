@@ -218,6 +218,7 @@ body.so-leitura #btnAi_reuniao,
 body.so-leitura #btnAi_retorno,
 body.so-leitura #btnAddTag,
 body.so-leitura #btnObs,
+body.so-leitura #btnMailDraft,
 body.so-leitura .dhead .pgrp{display:none}
 
 /* ── Alinhamento inline (mesmos campos do modal, dentro do drawer) ── */
@@ -229,6 +230,23 @@ body.so-leitura .dhead .pgrp{display:none}
 .alintxt:disabled{background:var(--cinza);color:var(--muted)}
 .alinbar{display:flex;gap:8px;align-items:center;margin-top:7px}
 .alinbar .m{flex:1;font-size:11.5px;color:var(--muted)}
+
+/* ── E-mail dos GAPs filtrados ── */
+#mailBg .amodal{width:900px}
+.mailsec{padding:14px 18px;border-bottom:1px solid #D8D8E4}
+.mailsec h5{margin:0 0 7px;font-size:12.5px;font-weight:800;color:var(--navy);letter-spacing:.02em}
+.mailsec .hint{font-size:11.5px;color:var(--muted);margin:9px 0 0}
+.mailgrid{display:grid;grid-template-columns:64px 1fr;gap:8px 10px;align-items:center}
+.mailgrid .f{font-size:11px;font-weight:800;color:var(--muted);text-transform:uppercase;letter-spacing:.04em}
+.mailgrid input{width:100%;border:1px solid #D8D8E4;border-radius:9px;padding:8px 11px;
+  font:inherit;font-size:13px;color:var(--navy);outline:none}
+.mailgrid input:focus{border-color:var(--roxo);box-shadow:0 0 0 3px rgba(118,65,192,.12)}
+.mailopts{display:flex;flex-wrap:wrap;gap:12px;align-items:center;margin-top:11px;font-size:12px}
+.mailopts .lbl{font-size:11px;font-weight:800;color:var(--muted);letter-spacing:.04em}
+.mailopts label{display:flex;align-items:center;gap:5px;cursor:pointer}
+.mailopts .sep{width:1px;height:15px;background:#D8D8E4}
+.mailprev{border:1px solid #D8D8E4;border-radius:10px;background:#fff;padding:12px;
+  max-height:44vh;overflow:auto}
 
 /* ── Alinhamento do GAP (cockpit.gap_alinhamentos) ── */
 #alinBg .amodal{width:820px}
@@ -285,6 +303,7 @@ body.so-leitura .dhead .pgrp{display:none}
   <span id="lblAtualizado" style="font-size:11px;opacity:.7"></span>
   <a class="btn btn-roxo" href="/gaps-reuniao.html" style="text-decoration:none" title="Tela de reunião de decisão com o cliente">🤝 Reunião de decisão</a>
   <a class="btn btn-roxo" id="btnKB" href="/kb" onclick="this.href='/kb?cliente='+encodeURIComponent(clienteAtual)" style="text-decoration:none" title="Base de Conhecimento Protheus do cliente — rotinas e usabilidades para compartilhar como base de Projeto e Funcionalidades">📚 Base de Conhecimento</a>
+  <button class="btn btn-roxo" id="btnMail" title="Gera um e-mail HTML com exatamente os GAPs que estão filtrados na tela e cria o rascunho no seu Gmail">📧 E-mail dos GAPs</button>
   <button class="btn btn-ghost" id="btnRefresh" title="Rebusca os tickets na API Tasks SC (roda clientes.py)">⟳ Atualizar dados</button>
   <a class="btn btn-ghost" id="btnAcessos" href="/admin" style="text-decoration:none;display:none"
      title="Cadastrar usuários, definir perfis e liberar clientes">⚙ Acessos</a>
@@ -417,6 +436,50 @@ body.so-leitura .dhead .pgrp{display:none}
       <span class="meta" id="alinMeta"></span>
       <button class="btn btn-roxo" id="btnAlinSalvar">💾 Salvar alinhamento</button>
       <button class="btn btn-ghost" onclick="closeAlin()">Fechar</button>
+    </div>
+  </div>
+</div>
+
+<!-- ════ E-mail dos GAPs filtrados ════ -->
+<div class="amodal-bg" id="mailBg" onclick="if(event.target===this)closeMail()">
+  <div class="amodal">
+    <div class="ahead">
+      <div class="at">📧 E-mail dos GAPs filtrados</div>
+      <div class="as" id="mailSub"></div>
+      <button class="ax" onclick="closeMail()">✕</button>
+    </div>
+
+    <div class="mailsec">
+      <div class="mailgrid">
+        <label class="f" for="mailTo">Para</label>
+        <input type="text" id="mailTo" placeholder="fulano@cliente.com.br, ciclano@cliente.com.br">
+        <label class="f" for="mailCc">Cc</label>
+        <input type="text" id="mailCc" placeholder="(opcional)">
+        <label class="f" for="mailSubj">Assunto</label>
+        <input type="text" id="mailSubj">
+      </div>
+      <div class="mailopts" id="mailOpts">
+        <span class="lbl">COLUNAS:</span>
+        <label><input type="checkbox" data-col="cls" checked> Classificação</label>
+        <label><input type="checkbox" data-col="st" checked> Status / etapa</label>
+        <label><input type="checkbox" data-col="dec" checked> Decisão</label>
+        <label><input type="checkbox" data-col="hrs" checked> Horas</label>
+        <span class="sep"></span>
+        <label><input type="checkbox" data-col="intro" checked> Texto de abertura</label>
+      </div>
+      <p class="hint" id="mailGmail">Verificando a conexão com o Gmail…</p>
+    </div>
+
+    <div class="mailsec">
+      <h5>Prévia</h5>
+      <div class="mailprev" id="mailPrev"></div>
+    </div>
+
+    <div class="alinfoot">
+      <span class="meta" id="mailMeta"></span>
+      <button class="btn btn-ghost" id="btnMailCopy" title="Copia o HTML puro, para colar onde quiser">📋 Copiar HTML</button>
+      <button class="btn btn-roxo" id="btnMailDraft">✉️ Criar rascunho</button>
+      <button class="btn btn-ghost" onclick="closeMail()">Fechar</button>
     </div>
   </div>
 </div>
@@ -1514,6 +1577,198 @@ window.acObs=acObs;
 window.openAcoes=openAcoes; window.closeAcoes=closeAcoes; window.acFoco=acFoco;
 window.acHist=acHist; window.acDraft=acDraft; window.toggleHistForm=toggleHistForm;
 
+/* ════════════════ E-mail dos GAPs filtrados ════════════════
+   Monta um e-mail HTML com EXATAMENTE os GAPs que estão passando pelos filtros
+   da tela (visiveis()), agrupados pelas mesmas colunas do board. É e-mail: todo
+   estilo vai inline e o layout é de tabela — <style> e flex/grid são removidos
+   ou ignorados pelo Gmail/Outlook.                                            */
+// Rótulos curtos: numa tabela de e-mail, "Entendimento durante o Projeto"
+// quebra em três linhas e desalinha a coluna.
+const DEC_TXT = {approve:"Aprovado", phase2:"2ª Fase", workaround:"Contorno",
+                 entend:"Entendimento no Projeto", refuse:"Recusado"};
+const DEC_COR = {approve:"#0F9D58", phase2:"#B7791F", workaround:"#1E5FBF",
+                 entend:"#7A5AF8", refuse:"#D93025"};
+const CLS_TXT = {NECESSARIO:"Necessário", DESEJAVEL:"Desejável", INDEFINIDO:"Indefinido",
+                 OPCIONAL:"Opcional", PRIORIDADE:"Prioridade"};
+const ETAPA_TXT = {"GAP":"GAP", "LEVANTAR REQUISITOS":"Levantar Requisitos",
+                   "LEVANTAMENTO":"Levantamento", "ORCAMENTO PENDENTE":"Orçamento Pendente"};
+
+const mailOpt = k => { const el = document.querySelector(`#mailOpts input[data-col="${k}"]`); return !el || el.checked; };
+const decOf = t => { const d = decisoesMap[t.uuid] || decisoesMap[t.id] || null; return (d && d.decisao) || ""; };
+const nomeClienteAtual = () => {
+  const sel = $("#selCliente");
+  return (sel && sel.selectedOptions[0] && sel.selectedOptions[0].textContent.trim()) || clienteAtual;
+};
+
+function buildGapsEmail(){
+  const vis = visiveis();
+  const cliente = nomeClienteAtual();
+  const hoje = new Date().toLocaleDateString("pt-BR");
+  const horasDe = t => Number(t.time_estimate) || 0;
+  const total = vis.reduce((s,t)=>s+horasDe(t), 0);
+
+  // O título é o que o cliente lê — fica com a maior fatia. As demais colunas
+  // não levam largura fixa (o Outlook estica tabela com soma de widths cravada)
+  // e só o Nº e as Horas ganham nowrap para não quebrarem no meio.
+  const cols = [];
+  cols.push({k:"id",  th:"Nº",  w:"70"});
+  cols.push({k:"tit", th:"GAP", w:"45%"});
+  if(mailOpt("cls")) cols.push({k:"cls", th:"Classificação"});
+  if(mailOpt("st"))  cols.push({k:"st",  th:"Status / etapa"});
+  if(mailOpt("dec")) cols.push({k:"dec", th:"Decisão"});
+  if(mailOpt("hrs")) cols.push({k:"hrs", th:"Horas", w:"62"});
+
+  const TH = 'style="padding:7px 9px;font:700 11px/1.3 Arial,Helvetica,sans-serif;color:#5A5A72;'
+           + 'text-transform:uppercase;letter-spacing:.04em;text-align:left;border-bottom:2px solid #D8D8E4"';
+  const TD = 'style="padding:8px 9px;font:400 13px/1.45 Arial,Helvetica,sans-serif;color:#0C2340;'
+           + 'border-bottom:1px solid #EDEDF3;vertical-align:top"';
+  const NOWRAP = ' white-space:nowrap;';
+
+  function linha(t){
+    const dec = decOf(t), cls = classeOf(t);
+    const cel = {
+      id : `<span style="font:700 12px/1.45 Arial,Helvetica,sans-serif;color:#5A5A72">#${esc(t.id||"")}</span>`,
+      tit: `<b>${esc(t.title || t.titulo || "(sem título)")}</b>`,
+      cls: cls ? esc(CLS_TXT[cls] || cls) : '<span style="color:#9A9AAE">—</span>',
+      st : `${esc(STATUS[t.status] || t.status_description || "—")}`
+           + `<br><span style="font-size:11px;color:#5A5A72">${esc(ETAPA_TXT[etapaPrincipal(t)] || "")}</span>`,
+      dec: dec ? `<span style="color:${DEC_COR[dec]||"#0C2340"};font-weight:700">${esc(DEC_TXT[dec]||dec)}</span>`
+                : '<span style="color:#9A9AAE">a decidir</span>',
+      hrs: horasDe(t) ? `<b>${horasDe(t)}h</b>`
+                      : '<span style="color:#D93025">s/ est.</span>',
+    };
+    return `<tr>${cols.map(c=>{
+      const nowrap = (c.k==="id"||c.k==="hrs") ? NOWRAP : "";
+      return `<td ${TD.slice(0,-1)}${nowrap}"${c.k==="hrs"?' align="right"':""}>${cel[c.k]}</td>`;
+    }).join("")}</tr>`;
+  }
+
+  let corpo = "";
+  COLS.forEach(col=>{
+    const doGrupo = vis.filter(t=>colOf(t)===col.key);
+    if(!doGrupo.length) return;
+    const h = doGrupo.reduce((s,t)=>s+horasDe(t), 0);
+    const titulo = col.titulo.replace(/^[^\p{L}]+/u, "");     // tira o emoji do board
+    corpo += `
+    <tr><td style="padding:22px 0 8px">
+      <table role="presentation" width="100%" cellpadding="0" cellspacing="0" border="0">
+        <tr>
+          <td style="font:800 13px/1.3 Arial,Helvetica,sans-serif;color:#0C2340;letter-spacing:.02em">
+            ${esc(titulo.toUpperCase())}
+            <span style="font-weight:400;color:#5A5A72"> · ${doGrupo.length} GAP${doGrupo.length>1?"s":""}</span>
+          </td>
+          ${mailOpt("hrs")?`<td align="right" style="font:700 13px/1.3 Arial,Helvetica,sans-serif;color:${h?"#7641C0":"#9A9AAE"};white-space:nowrap">${h?h+"h":"sem estimativa"}</td>`:""}
+        </tr>
+      </table>
+    </td></tr>
+    <tr><td>
+      <table role="presentation" width="100%" cellpadding="0" cellspacing="0" border="0"
+             style="border-collapse:collapse;border:1px solid #EDEDF3;border-radius:8px">
+        <tr style="background:#F6F6FA">
+          ${cols.map(c=>`<th ${TH}${c.w?` width="${c.w}"`:""}${c.k==="hrs"?' align="right"':""}>${c.th}</th>`).join("")}
+        </tr>
+        ${doGrupo.map(linha).join("")}
+      </table>
+    </td></tr>`;
+  });
+
+  if(!corpo){
+    corpo = `<tr><td style="padding:22px 0;font:400 13px Arial,Helvetica,sans-serif;color:#5A5A72">
+      Nenhum GAP corresponde aos filtros atuais.</td></tr>`;
+  }
+
+  const intro = mailOpt("intro") ? `
+    <tr><td style="padding:4px 0 0;font:400 14px/1.6 Arial,Helvetica,sans-serif;color:#0C2340">
+      <p style="margin:0 0 12px">Olá,</p>
+      <p style="margin:0 0 12px">Segue a relação dos GAPs de <b>${esc(cliente)}</b> em acompanhamento,
+      organizada pela etapa em que cada item se encontra. Os itens já estimados trazem as horas
+      previstas de desenvolvimento e validação.</p>
+      <p style="margin:0 0 12px">Fico à disposição para detalhar qualquer um deles.</p>
+    </td></tr>` : "";
+
+  const html = `<div style="background:#F4F4F8;padding:20px 0;font-family:Arial,Helvetica,sans-serif">
+  <table role="presentation" width="680" cellpadding="0" cellspacing="0" border="0"
+         style="width:680px;max-width:100%;margin:0 auto;background:#ffffff;border-radius:12px;
+                padding:24px 26px;border:1px solid #E4E4EE">
+    <tr><td style="padding-bottom:4px">
+      <div style="font:800 15px/1.3 Arial,Helvetica,sans-serif;color:#0C2340;letter-spacing:.04em">TOTVS · SANTA CATARINA</div>
+      <div style="font:400 12px/1.4 Arial,Helvetica,sans-serif;color:#5A5A72;letter-spacing:.06em;text-transform:uppercase">
+        Tomada de decisão de GAPs — ${esc(cliente)}</div>
+    </td></tr>
+    <tr><td style="padding:14px 0 0">
+      <table role="presentation" width="100%" cellpadding="0" cellspacing="0" border="0"
+             style="background:#F6F6FA;border-radius:10px">
+        <tr>
+          <td style="padding:12px 14px;font:400 12px/1.4 Arial,Helvetica,sans-serif;color:#5A5A72">
+            <b style="font-size:19px;color:#0C2340">${vis.length}</b> GAP${vis.length===1?"":"s"} no radar
+          </td>
+          ${mailOpt("hrs")?`<td align="right" style="padding:12px 14px;font:400 12px/1.4 Arial,Helvetica,sans-serif;color:#5A5A72">
+            <b style="font-size:19px;color:#7641C0">${total}h</b> estimadas
+          </td>`:""}
+        </tr>
+      </table>
+    </td></tr>
+    ${intro}
+    ${corpo}
+    <tr><td style="padding:22px 0 0;border-top:1px solid #EDEDF3;margin-top:18px;
+                   font:400 11px/1.5 Arial,Helvetica,sans-serif;color:#9A9AAE">
+      Posição de ${esc(hoje)} · gerado pelo painel de Tomada de Decisão de GAPs — TOTVS Santa Catarina.
+    </td></tr>
+  </table>
+</div>`;
+
+  return {
+    html,
+    subject: `GAPs ${cliente} — ${vis.length} ${vis.length===1?"item":"itens"}`
+             + (total ? ` · ${total}h estimadas` : "") + ` (posição de ${hoje})`,
+    n: vis.length, horas: total,
+  };
+}
+
+let mailHtml = "";
+function renderMailPrev(){
+  const m = buildGapsEmail();
+  mailHtml = m.html;
+  $("#mailPrev").innerHTML = m.html;
+  $("#mailSub").textContent = `${m.n} GAP${m.n===1?"":"s"} · ${m.horas}h · ${nomeClienteAtual()} — respeita os filtros da tela`;
+  if(!$("#mailSubj").dataset.tocado) $("#mailSubj").value = m.subject;
+}
+function openMail(){
+  const vis = visiveis();
+  if(!vis.length) return toast("Nenhum GAP nos filtros atuais — ajuste os filtros antes.","err");
+  $("#mailSubj").dataset.tocado = "";
+  $("#mailMeta").textContent = "";
+  renderMailPrev();
+  $("#mailBg").classList.add("open");
+  // status da conexão com o Gmail — define se o rascunho nasce na caixa ou no banco
+  api("/api/gmail/credencial").then(j=>{
+    $("#mailGmail").innerHTML = j.configurado
+      ? `✉️ O rascunho será criado em <b>${esc(j.gmail_email)}</b> (pasta Rascunhos).`
+      : `⚠️ Nenhuma conta Gmail conectada — o rascunho ficará só salvo no banco. `
+        + `<a href="/admin#gmail" style="color:var(--roxo);font-weight:700">Conectar meu Gmail →</a>`;
+  }).catch(()=>{ $("#mailGmail").textContent = "Não foi possível verificar a conexão com o Gmail."; });
+}
+function closeMail(){ $("#mailBg").classList.remove("open"); }
+async function mailDraft(){
+  const b = $("#btnMailDraft"); const old = b.textContent;
+  b.disabled = true; b.textContent = "⏳ Criando…";
+  try{
+    const j = await api("/api/gmail/draft",{method:"POST",headers:{"Content-Type":"application/json"},
+      body:JSON.stringify({tipo:"gaps_filtrados", to:$("#mailTo").value.trim(),
+                           cc:$("#mailCc").value.trim(), subject:$("#mailSubj").value.trim(),
+                           corpo_html: mailHtml})});
+    $("#mailMeta").textContent = j.info || "";
+    toast(j.gmail ? "Rascunho criado no seu Gmail ✓" : "Rascunho salvo no banco (Gmail não conectado)",
+          j.gmail ? "ok" : "err");
+  }catch(e){ toast("Falha criando rascunho: "+e.message,"err"); }
+  finally{ b.disabled=false; b.textContent=old; }
+}
+async function mailCopy(){
+  try{ await navigator.clipboard.writeText(mailHtml); toast("HTML copiado ✓","ok"); }
+  catch(e){ toast("O navegador bloqueou a cópia — use o rascunho.","err"); }
+}
+window.closeMail = closeMail;
+
 /* ════════════════ Filtros / util ════════════════ */
 
 /* ════════════════ "Ver como" — admin simula a visão de outro usuário ════════
@@ -1693,7 +1948,8 @@ $("#btnRefresh").onclick = async ()=>{
   b.disabled=false; b.textContent="⟳ Atualizar dados";
 };
 document.addEventListener("keydown", e=>{ if(e.key==="Escape"){
-  if($("#obsBg").classList.contains("open")) closeObs();
+  if($("#mailBg").classList.contains("open")) closeMail();
+  else if($("#obsBg").classList.contains("open")) closeObs();
   else if($("#alinBg").classList.contains("open")) closeAlin();
   else if($("#amodalBg").classList.contains("open")) closeAcoes();
   else closeDrawer();
@@ -1707,6 +1963,15 @@ window.onDrop = onDrop; window.openDrawer = openDrawer; window.closeDrawer = clo
 window.openAlin = openAlin; window.closeAlin = closeAlin;
 window.$ = $;
 $("#btnAlinSalvar").onclick = salvarAlin;
+
+/* ── E-mail dos GAPs filtrados ── */
+$("#btnMail").onclick      = openMail;
+$("#btnMailDraft").onclick = mailDraft;
+$("#btnMailCopy").onclick  = mailCopy;
+// marcar/desmarcar coluna redesenha a prévia na hora
+$("#mailOpts").addEventListener("change", renderMailPrev);
+// se o usuário editar o assunto, paramos de sobrescrevê-lo a cada redesenho
+$("#mailSubj").addEventListener("input", e=>{ e.target.dataset.tocado = "1"; });
 
 init();
 </script>

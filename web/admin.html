@@ -178,6 +178,35 @@ footer{padding:18px;text-align:center;color:var(--muted);font-size:11px}
       <p class="hint" id="hintPerfil"></p>
     </div>
   </div>
+
+  <!-- ════ Gmail (todos) ════ -->
+  <div class="card" id="gmail">
+    <h2>✉️ Gmail <small>para os rascunhos de e-mail nascerem na sua caixa</small></h2>
+    <div class="body">
+      <p class="hint" style="margin:0 0 12px">
+        O botão <b>📧 E-mail dos GAPs</b> do painel cria um rascunho de verdade na sua pasta
+        <b>Rascunhos</b> do Gmail. Para isso o Google exige uma <b>App Password</b> de 16 caracteres —
+        a senha normal da conta não funciona. Ative a verificação em duas etapas e gere a senha em
+        <a href="https://myaccount.google.com/apppasswords" target="_blank" rel="noopener">myaccount.google.com/apppasswords</a>.
+        Ela é gravada cifrada e nunca volta para a tela.
+      </p>
+      <div id="gmStatus" class="hint" style="margin:0 0 12px">Carregando…</div>
+      <div class="grid" style="max-width:640px">
+        <div>
+          <label class="f" for="gmEmail">Seu endereço Gmail</label>
+          <input type="email" id="gmEmail" placeholder="nome@gmail.com" autocomplete="off">
+        </div>
+        <div>
+          <label class="f" for="gmSenha">App Password (16 caracteres)</label>
+          <input type="password" id="gmSenha" placeholder="xxxx xxxx xxxx xxxx" autocomplete="new-password">
+        </div>
+      </div>
+      <div style="display:flex;gap:8px;margin-top:12px">
+        <button class="btn btn-roxo" id="btnGmSalvar">Conectar Gmail</button>
+        <button class="btn btn-ghost" id="btnGmRemover">Desconectar</button>
+      </div>
+    </div>
+  </div>
 </div>
 
 <!-- ════ Modal: clientes autorizados ════ -->
@@ -468,6 +497,45 @@ $("#btnTrocar").onclick = async () => {
   }catch(e){ toast("Falha: " + e.message, "err"); }
   b.disabled = false;
 };
+
+/* ════════════════ Gmail (credencial pessoal) ════════════════
+   O backend valida por IMAP antes de gravar — se o Google recusar, nada é salvo
+   e a mensagem de erro do Gmail chega inteira aqui.                            */
+async function gmCarregar(){
+  try{
+    const j = await api("/api/gmail/credencial");
+    $("#gmStatus").innerHTML = j.configurado
+      ? `✅ Conectado como <b>${j.gmail_email}</b>${j.validado_em?` · validado em ${new Date(j.validado_em).toLocaleString("pt-BR")}`:""}`
+      : "⚠️ Nenhuma conta conectada — os rascunhos ficam salvos só no banco.";
+    if(j.gmail_email && !$("#gmEmail").value) $("#gmEmail").value = j.gmail_email;
+  }catch(e){ $("#gmStatus").textContent = "Não foi possível ler o status ("+e.message+")."; }
+}
+$("#btnGmSalvar").onclick = async () => {
+  const gmail_email = $("#gmEmail").value.trim();
+  const app_password = $("#gmSenha").value.replace(/\s+/g,"");
+  if(!gmail_email) return toast("Informe o endereço Gmail.", "err");
+  if(app_password.length < 16) return toast("A App Password tem 16 caracteres.", "err");
+  const b = $("#btnGmSalvar"); b.disabled = true; const old = b.textContent; b.textContent = "Validando no Gmail…";
+  try{
+    await api("/api/gmail/credencial", {method:"POST",
+      headers:{"Content-Type":"application/json"}, body: JSON.stringify({gmail_email, app_password})});
+    $("#gmSenha").value = "";
+    toast("Gmail conectado ✓", "ok");
+    gmCarregar();
+  }catch(e){ toast("Falha: " + e.message, "err"); }
+  b.disabled = false; b.textContent = old;
+};
+$("#btnGmRemover").onclick = async () => {
+  const b = $("#btnGmRemover"); b.disabled = true;
+  try{
+    await api("/api/gmail/credencial/remover", {method:"POST"});
+    $("#gmSenha").value = "";
+    toast("Gmail desconectado ✓", "ok");
+    gmCarregar();
+  }catch(e){ toast("Falha: " + e.message, "err"); }
+  b.disabled = false;
+};
+gmCarregar();
 
 $("#btnSair").onclick = async () => {
   try{ await fetch("/api/logout", {method:"POST", credentials:"same-origin"}); }catch(_){}
