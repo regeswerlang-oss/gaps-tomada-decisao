@@ -247,6 +247,14 @@ body.so-leitura .dhead .pgrp{display:none}
 .mailopts .sep{width:1px;height:15px;background:#D8D8E4}
 .mailprev{border:1px solid #D8D8E4;border-radius:10px;background:#fff;padding:12px;
   max-height:44vh;overflow:auto}
+#mailIntroBox{margin-top:12px}
+#mailIntroBox.off{display:none}
+.mailintrohead{display:flex;align-items:center;gap:9px;margin-bottom:5px}
+.mailintrohead .f{font-size:11px;font-weight:800;color:var(--muted);text-transform:uppercase;letter-spacing:.04em}
+.mailintrohead .btn{margin-left:auto;padding:3px 9px;font-size:11.5px}
+.mailintro{width:100%;min-height:92px;resize:vertical;border:1px solid #D8D8E4;border-radius:9px;
+  padding:9px 11px;font:inherit;font-size:13px;line-height:1.5;color:var(--navy);background:#fff;outline:none}
+.mailintro:focus{border-color:var(--roxo);box-shadow:0 0 0 3px rgba(118,65,192,.12)}
 
 /* ── Alinhamento do GAP (cockpit.gap_alinhamentos) ── */
 #alinBg .amodal{width:820px}
@@ -466,6 +474,14 @@ body.so-leitura .dhead .pgrp{display:none}
         <label><input type="checkbox" data-col="hrs" checked> Horas</label>
         <span class="sep"></span>
         <label><input type="checkbox" data-col="intro" checked> Texto de abertura</label>
+      </div>
+      <div id="mailIntroBox">
+        <div class="mailintrohead">
+          <span class="f">Texto de abertura</span>
+          <span class="hint" style="margin:0">linha em branco separa parágrafos · <code>**assim**</code> fica em negrito</span>
+          <button class="btn btn-ghost" id="btnMailIntroPadrao" title="Volta ao texto sugerido para este cliente">↺ padrão</button>
+        </div>
+        <textarea id="mailIntro" class="mailintro" rows="5"></textarea>
       </div>
       <p class="hint" id="mailGmail">Verificando a conexão com o Gmail…</p>
     </div>
@@ -1600,6 +1616,25 @@ const nomeClienteAtual = () => {
   return (sel && sel.selectedOptions[0] && sel.selectedOptions[0].textContent.trim()) || clienteAtual;
 };
 
+// Texto sugerido — ponto de partida editável, não camisa de força.
+function introPadrao(){
+  const cliente = nomeClienteAtual();
+  return `Olá,\n\n`
+       + `Segue a relação dos GAPs de **${cliente}** em acompanhamento, organizada pela `
+       + `etapa em que cada item se encontra. Os itens já estimados trazem as horas previstas `
+       + `de desenvolvimento e validação.\n\n`
+       + `Fico à disposição para detalhar qualquer um deles.`;
+}
+// Texto puro → HTML de e-mail. Escapa tudo (é digitado por gente), quebra em
+// parágrafos por linha em branco, <br> nas quebras simples e **isto** em negrito.
+function introHtml(txt){
+  return String(txt).replace(/\r/g,"").split(/\n{2,}/).map(par=>{
+    const corpo = esc(par.trim()).replace(/\n/g,"<br>")
+      .replace(/\*\*([^*]+)\*\*/g, "<b>$1</b>");
+    return `<p style="margin:0 0 12px">${corpo}</p>`;
+  }).join("");
+}
+
 function buildGapsEmail(){
   const vis = visiveis();
   const cliente = nomeClienteAtual();
@@ -1677,13 +1712,10 @@ function buildGapsEmail(){
       Nenhum GAP corresponde aos filtros atuais.</td></tr>`;
   }
 
-  const intro = mailOpt("intro") ? `
+  const texto = ($("#mailIntro") ? $("#mailIntro").value : introPadrao()).trim();
+  const intro = (mailOpt("intro") && texto) ? `
     <tr><td style="padding:4px 0 0;font:400 14px/1.6 Arial,Helvetica,sans-serif;color:#0C2340">
-      <p style="margin:0 0 12px">Olá,</p>
-      <p style="margin:0 0 12px">Segue a relação dos GAPs de <b>${esc(cliente)}</b> em acompanhamento,
-      organizada pela etapa em que cada item se encontra. Os itens já estimados trazem as horas
-      previstas de desenvolvimento e validação.</p>
-      <p style="margin:0 0 12px">Fico à disposição para detalhar qualquer um deles.</p>
+      ${introHtml(texto)}
     </td></tr>` : "";
 
   const html = `<div style="background:#F4F4F8;padding:20px 0;font-family:Arial,Helvetica,sans-serif">
@@ -1738,6 +1770,10 @@ function openMail(){
   if(!vis.length) return toast("Nenhum GAP nos filtros atuais — ajuste os filtros antes.","err");
   $("#mailSubj").dataset.tocado = "";
   $("#mailMeta").textContent = "";
+  // o texto de abertura só é reescrito enquanto você não mexeu nele — assim
+  // trocar de cliente traz o texto certo, mas nunca apaga o que você escreveu
+  if(!$("#mailIntro").dataset.tocado) $("#mailIntro").value = introPadrao();
+  $("#mailIntroBox").classList.toggle("off", !mailOpt("intro"));
   renderMailPrev();
   $("#mailBg").classList.add("open");
   // status da conexão com o Gmail — define se o rascunho nasce na caixa ou no banco
@@ -1971,9 +2007,19 @@ $("#btnMail").onclick      = openMail;
 $("#btnMailDraft").onclick = mailDraft;
 $("#btnMailCopy").onclick  = mailCopy;
 // marcar/desmarcar coluna redesenha a prévia na hora
-$("#mailOpts").addEventListener("change", renderMailPrev);
+$("#mailOpts").addEventListener("change", ()=>{
+  $("#mailIntroBox").classList.toggle("off", !mailOpt("intro"));
+  renderMailPrev();
+});
 // se o usuário editar o assunto, paramos de sobrescrevê-lo a cada redesenho
 $("#mailSubj").addEventListener("input", e=>{ e.target.dataset.tocado = "1"; });
+// texto de abertura: redesenha enquanto digita e marca como editado
+$("#mailIntro").addEventListener("input", e=>{ e.target.dataset.tocado = "1"; renderMailPrev(); });
+$("#btnMailIntroPadrao").onclick = ()=>{
+  $("#mailIntro").value = introPadrao();
+  $("#mailIntro").dataset.tocado = "";
+  renderMailPrev();
+};
 
 init();
 </script>
