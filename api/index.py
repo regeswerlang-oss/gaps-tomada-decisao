@@ -610,6 +610,41 @@ def _resolve_tag_ids(values, current_tag_items):
     return out, desconhecidas
 
 
+def _observers_fetch(uuid):
+    """Observadores AO VIVO do Tasks SC. Devolve (items_crus, codigos).
+
+    A API não documenta o nome da chave do código do observador — o portal
+    devolve o registro inteiro. Por isso tentamos, em ordem, os nomes que
+    aparecem nas outras rotas do módulo. `raw` volta na resposta da rota
+    /observers para conferência quando algo não bater.
+    """
+    data, code, _ = tasks_request("GET", f"/observers/ticket/{uuid}")
+    items = (data.get("items") or []) if (code == 200 and isinstance(data, dict)) else []
+    codigos = []
+    for it in items:
+        if isinstance(it, str):
+            cod = it.strip()
+        else:
+            cod = ""
+            for k in ("observer", "user", "user_code", "code", "id", "user_assigned"):
+                v = it.get(k)
+                if isinstance(v, str) and v.strip():
+                    cod = v.strip()
+                    break
+        if cod and cod not in codigos:
+            codigos.append(cod)
+    return items, codigos
+
+
+def _observer_nome(item):
+    for k in ("observer_description", "user_name", "name", "description",
+              "user_assigned_description"):
+        v = (item or {}).get(k) if isinstance(item, dict) else None
+        if isinstance(v, str) and v.strip():
+            return v.strip()
+    return ""
+
+
 def tasks_update(uuid, changes):
     """GET → merge → PUT (a API não tem PATCH).
 
@@ -642,6 +677,17 @@ def tasks_update(uuid, changes):
     tag_data, tcode, terr = tasks_request("GET", f"/tickets/tags/{uuid}")
     tag_data_items = tag_data.get("items") or [] if tcode == 200 else []
     tag_ids = [t["id"] for t in tag_data_items]
+    # Observadores: o PUT substitui a lista inteira. Se mandássemos [] fixo (como
+    # era antes), toda gravação de status/tag/estimativa apagaria silenciosamente
+    # os observadores da Task. Hidrata do Tasks SC e só troca quando pedido.
+    try:
+        _, obs_atuais = _observers_fetch(uuid)
+    except Exception:
+        obs_atuais = []
+    if not obs_atuais:
+        cur_obs = current.get("observer")
+        if isinstance(cur_obs, list):
+            obs_atuais = [str(o).strip() for o in cur_obs if str(o).strip()]
 
     if tags_add or tags_rem:
         vivos = [str(t.get("tag") or "").strip() for t in tag_data_items]
@@ -669,7 +715,7 @@ def tasks_update(uuid, changes):
         "service_description": current.get("service_description", "") or "",
         "user_assigned": current.get("user_assigned", "") or "",
         "assigned_customer": current.get("assigned_customer") or None,
-        "observer": [], "tags": list(tag_ids),
+        "observer": list(obs_atuais), "tags": list(tag_ids),
         "start_date": current.get("start_date", "") or "",
         "start_time": current.get("start_time", "") or "",
         "end_date": current.get("end_date", "") or "",
@@ -691,6 +737,9 @@ def tasks_update(uuid, changes):
     payload.update(changes)
     if payload["assigned_customer"] == "":
         payload["assigned_customer"] = None
+    if not isinstance(payload.get("observer"), list):
+        payload["observer"] = []
+    payload["observer"] = [str(o).strip() for o in payload["observer"] if str(o).strip()]
     if payload["project"] == "":
         payload["project"] = None
     data, code, err = tasks_request("PUT", "/tickets", body=payload)
@@ -1924,6 +1973,92 @@ def api_ticket_history(uuid):
     nlm = [i for i in items if _is_prefixed(i, NLM_PREFIX)]
     tec = [i for i in items if _is_prefixed(i, TEC_PREFIX)]
     return _json({"ok": True, "uuid": uuid, "items": items, "nlm": nlm, "tec": tec})
+
+
+@app.get("/api/ticket/<uuid>/observers")
+def api_ticket_observers(uuid):
+    """Observadores da Task, ao vivo. `raw` volta junto para diagnóstico: se um
+    dia a API mudar o nome da chave do código, dá para ver aqui sem adivinhar."""
+    if (r := require_auth()):
+        return r
+    if (g := deny_uuid(uuid)):
+        return g
+    try:
+        items, codigos = _observers_fetch(uuid)
+    except Exception as e:
+        return _err(502, f"Falha lendo observadores: {e}")
+    lista = []
+    if len(items) == len(codigos):
+        for it, cod in zip(items, codigos):
+            lista.append({"id": cod, "nome": _observer_nome(it) or cod})
+    else:
+        lista = [{"id": c, "nome": c} for c in codigos]
+    return _json({"ok": True, "uuid": uuid, "codigos": codigos,
+                  "observadores": lista, "raw": items})
+
+
+@app.get("/api/pessoas")
+def api_pessoas():
+    """Combos de pessoas do drawer.
+
+    - `internos`  → consultores TOTVS. Derivados de cockpit.tickets (código +
+      descrição que o próprio Tasks SC já gravou no `raw`), respeitando o
+      recorte de clientes do usuário. Sem seed manual para envelhecer.
+    - `cliente`   → usuários do cadastro do cliente, ao vivo em
+      GET /assigned_users?customer=… (mesma fonte do combo do portal).
+    """
+    if (r := require_auth()):
+        return r
+    chave = request.args.get("cliente", "").strip()
+    customer, _nome = _resolve_customer(chave) if chave else (None, None)
+    if chave and not customer:
+        return _err(404, f"Cliente '{chave}' não encontrado.")
+    if customer and (d := deny_customer(customer)):
+        return d
+
+    permitidos = allowed_customers()
+    sql = """
+        select t.user_assigned as id,
+               max(coalesce(nullif(t.raw->>'user_assigned_description',''),
+                            t.user_assigned)) as nome
+          from cockpit.tickets t
+         where coalesce(t.user_assigned,'') <> ''
+    """
+    params = []
+    if permitidos is not None:
+        if not permitidos:
+            return _json({"ok": True, "internos": [], "cliente": []})
+        sql += " and t.customer = any(%s)"
+        params.append(list(permitidos))
+    sql += " group by t.user_assigned order by 2"
+    try:
+        internos = [{"id": r["id"], "nome": r["nome"]} for r in (q(sql, params or None) or [])]
+    except Exception:
+        internos = []
+
+    do_cliente = []
+    if customer:
+        data, code, _ = tasks_request("GET", "/assigned_users",
+                                      params={"customer": customer, "page": 1,
+                                              "pageSize": 200, "search": ""})
+        if code == 200 and isinstance(data, dict):
+            for it in (data.get("items") or []):
+                cod = ""
+                for k in ("assigned_customer", "user", "code", "id"):
+                    v = it.get(k)
+                    if isinstance(v, str) and v.strip():
+                        cod = v.strip()
+                        break
+                nome = ""
+                for k in ("assigned_customer_description", "name", "user_name", "description"):
+                    v = it.get(k)
+                    if isinstance(v, str) and v.strip():
+                        nome = v.strip()
+                        break
+                if cod:
+                    do_cliente.append({"id": cod, "nome": nome or cod})
+    return _json({"ok": True, "customer": customer,
+                  "internos": internos, "cliente": do_cliente})
 
 
 @app.get("/api/tags-catalog")

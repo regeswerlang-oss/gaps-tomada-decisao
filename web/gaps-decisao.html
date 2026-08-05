@@ -104,6 +104,22 @@ header input::placeholder{color:#9FB2CC}
 .dhead input.dtitle{width:100%;background:transparent;border:none;border-bottom:1px dashed #3A5578;color:#fff;font-size:16px;font-weight:700;padding:4px 0;margin-top:2px}
 .dhead .drow{display:flex;gap:8px;margin-top:10px;flex-wrap:wrap;align-items:center}
 .dhead select,.dhead input[type=date]{background:#1A3558;color:#fff;border:none;border-radius:7px;padding:6px 9px;font-size:12px}
+/* Pessoas no cabeçalho: responsável interno, responsável do cliente e o
+   contador de observadores. Os selects gravam AO VIVO no change. */
+.dhead .pgrp{display:inline-flex;align-items:center;gap:5px;font-size:12px}
+.dhead .pgrp select{max-width:190px}
+#btnObs .obsn{display:inline-block;min-width:17px;padding:0 5px;margin-left:4px;border-radius:9px;
+  background:var(--roxo);color:#fff;font-size:10px;font-weight:800;line-height:16px;text-align:center}
+#btnObs .obsn.zero{background:#5A6B85}
+/* Modal de observadores — mesma casca do modal de Ações */
+.obslist{max-height:46vh;overflow-y:auto;margin:0 14px 10px;border:1px solid #E4E4EE;border-radius:10px}
+.obslist label{display:flex;align-items:center;gap:9px;padding:9px 12px;font-size:13px;border-bottom:1px solid #F0F0F6;cursor:pointer}
+.obslist label:last-child{border-bottom:none}
+.obslist label:hover{background:var(--lilas)}
+.obslist label.on{background:var(--lilas);font-weight:700}
+.obslist .cod{margin-left:auto;font-size:10.5px;color:var(--muted);font-family:ui-monospace,monospace}
+.obsbar{display:flex;gap:8px;align-items:center;padding:0 18px 16px}
+.obsbar input[type=search]{flex:1;padding:8px 10px;border:1px solid #DCDCE8;border-radius:8px;font-size:13px}
 .dbody{flex:1;overflow-y:auto;padding:20px 26px 110px;display:grid;grid-template-columns:repeat(3,1fr);gap:0 26px;align-content:start}
 .dcol{min-width:0}
 .full{grid-column:1/-1}
@@ -200,7 +216,9 @@ body.so-leitura #btnAi_quest,
 body.so-leitura #btnAi_arg,
 body.so-leitura #btnAi_reuniao,
 body.so-leitura #btnAi_retorno,
-body.so-leitura #btnAddTag{display:none}
+body.so-leitura #btnAddTag,
+body.so-leitura #btnObs,
+body.so-leitura .dhead .pgrp{display:none}
 
 /* ── Alinhamento inline (mesmos campos do modal, dentro do drawer) ── */
 .alintxt{width:100%;min-height:76px;resize:vertical;border:1px solid #D8D8E4;border-radius:9px;
@@ -320,6 +338,11 @@ body.so-leitura #btnAddTag{display:none}
     <div class="drow">
       <select id="dStatus"></select>
       <input type="date" id="dDue" title="Vencimento">
+      <span class="pgrp" title="Responsável interno (consultor TOTVS)">👤
+        <select id="dResp"><option value="">— responsável —</option></select></span>
+      <span class="pgrp" title="Responsável do lado do cliente">🏢
+        <select id="dRespCli"><option value="">— resp. cliente —</option></select></span>
+      <button class="btn btn-ghost" id="btnObs" title="Observadores da Task">👁 Observadores <span class="obsn" id="dObsN">0</span></button>
       <span style="font-size:11px;opacity:.75" id="dMeta"></span>
       <span style="flex:1"></span>
       <span class="status-msg" id="dMsg" style="font-size:11px;opacity:.85;margin-right:6px"></span>
@@ -340,6 +363,27 @@ body.so-leitura #btnAddTag{display:none}
       <button class="ax" onclick="closeAcoes()">✕</button>
     </div>
     <div id="aBody"></div>
+  </div>
+</div>
+<div class="amodal-bg" id="obsBg" onclick="if(event.target===this)closeObs()">
+  <div class="amodal">
+    <div class="ahead">
+      <div class="at">👁 Observadores da Task</div>
+      <div class="as" id="obsSub"></div>
+      <button class="ax" onclick="closeObs()">✕</button>
+    </div>
+    <div class="agroup">QUEM ACOMPANHA ESTA TASK</div>
+    <div style="padding:0 18px 10px;font-size:11.5px;color:var(--muted)">
+      Observador recebe as notificações da Task no Tasks SC, mas não responde por ela.
+      Marque quantos precisar — a lista é gravada ao vivo.
+    </div>
+    <div class="obsbar"><input type="search" id="obsBusca" placeholder="Buscar consultor…"></div>
+    <div class="obslist" id="obsList"><div class="loading" style="padding:14px">Carregando…</div></div>
+    <div class="obsbar">
+      <span class="m" id="obsMeta" style="flex:1;font-size:11.5px;color:var(--muted)"></span>
+      <button class="btn btn-roxo" id="btnObsSalvar">💾 Gravar observadores</button>
+      <button class="btn btn-ghost" onclick="closeObs()">Fechar</button>
+    </div>
   </div>
 </div>
 <div class="amodal-bg" id="alinBg" onclick="if(event.target===this)closeAlin()">
@@ -672,7 +716,10 @@ async function openDrawer(uuid){
   $("#dTitle").value = t.title||"";
   $("#dStatus").innerHTML = Object.entries(STATUS).map(([k,v])=>`<option value="${k}" ${k===t.status?"selected":""}>${v}</option>`).join("");
   $("#dDue").value = isoDate(t.due_date);
-  $("#dMeta").textContent = `resp.: ${t.user_assigned_description||"—"}`;
+  $("#dMeta").textContent = "";
+  fillPessoas(t);
+  loadObsCount(t);
+  $("#btnObs").onclick = openObs;
   $("#dMsg").textContent = "";
   $("#btnAcoes").onclick = openAcoes;
   $("#btnAlin").onclick = ()=>openAlin(uuid);
@@ -859,8 +906,8 @@ function bodyHtml(t){
         <dt>Status</dt><dd>${esc(t.status_description||"")}</dd>
         <dt>Serviço</dt><dd>${esc(t.service_description||"—")}</dd>
         <dt>Atividade</dt><dd>${esc(t.activity_description||"—")}</dd>
-        <dt>Resp. interno</dt><dd>${esc(t.user_assigned_description||"—")}</dd>
-        <dt>Resp. cliente</dt><dd>${esc(t.assigned_customer_description||"—")}</dd>
+        <dt>Resp. interno</dt><dd id="dRespTxt">${esc(t.user_assigned_description||"—")}</dd>
+        <dt>Resp. cliente</dt><dd id="dRespCliTxt">${esc(t.assigned_customer_description||"—")}</dd>
         <dt>Última atualização</dt><dd>${fmtData(t.update_date)} ${esc(t.update_time||"")}</dd>
         <dt>Horas apontadas</dt><dd>${t.time_spent||0}h</dd>
       </dl></div>
@@ -1075,7 +1122,8 @@ async function saveChanges(t, changes, label){
     }
     $("#dMsg").textContent = "Salvo às "+new Date().toLocaleTimeString("pt-BR");
     toast(`#${t.id} — ${label} ✓`,"ok"); render();
-  }catch(e){ $("#dMsg").textContent=""; toast("Falha: "+e.message,"err"); }
+    return true;
+  }catch(e){ $("#dMsg").textContent=""; toast("Falha: "+e.message,"err"); return false; }
 }
 window.removeTag = async (tg)=>{
   const t = tickets.find(x=>x.uuid===openUuid); if(!t) return;
@@ -1215,6 +1263,135 @@ async function loadNlm(t, force){
   }catch(e){ if(openUuid===t.uuid) elN.outerHTML = `<div id="dNlm" class="loading">Erro lendo histórico: ${esc(e.message)}</div>`; }
 }
 
+/* ════════════════ Pessoas: responsáveis e observadores ════════════════
+   Três papéis distintos na mesma Task:
+     • Resp. interno  (user_assigned)     — o consultor TOTVS que responde por ela
+     • Resp. cliente  (assigned_customer) — quem responde do lado do cliente
+     • Observadores   (observer[])        — quem acompanha, sem responder
+   Os dois selects ficam no cabeçalho do drawer e gravam AO VIVO no change
+   (mesma política das tags). Os observadores abrem em modal por serem vários.
+   A lista de gente vem de /api/pessoas: internos derivados do banco, usuários
+   do cliente ao vivo do Tasks SC. */
+let pessoas = {internos:[], cliente:[]};
+let pessoasDe = null;        // slug do cliente já carregado
+let pessoasReq = null;       // promise em voo (evita N chamadas ao abrir cards)
+function loadPessoas(){
+  if(pessoasDe === clienteAtual) return Promise.resolve(pessoas);
+  if(pessoasReq) return pessoasReq;
+  pessoasReq = api("/api/pessoas?cliente="+encodeURIComponent(clienteAtual))
+    .then(j=>{ pessoas = {internos:j.internos||[], cliente:j.cliente||[]}; pessoasDe = clienteAtual; return pessoas; })
+    .finally(()=>{ pessoasReq = null; });
+  return pessoasReq;
+}
+/* Monta as opções mantendo SEMPRE o valor atual na lista — mesmo que o
+   catálogo ainda não tenha chegado ou que a pessoa não esteja mais nele.
+   Sem isso o select "escorregaria" para vazio e o próximo change apagaria
+   o responsável sem ninguém pedir. */
+function pessoaOpts(lista, atual, nomeAtual, vazio){
+  const itens = (lista||[]).slice();
+  if(atual && !itens.some(p=>p.id===atual)) itens.unshift({id:atual, nome:nomeAtual||atual});
+  return `<option value="">${vazio}</option>` + itens.map(p=>
+    `<option value="${esc(p.id)}" ${p.id===atual?"selected":""}>${esc(p.nome||p.id)}</option>`).join("");
+}
+function pintaPessoas(t){
+  const r = $("#dResp"), c = $("#dRespCli");
+  if(!r || !c) return;
+  r.innerHTML = pessoaOpts(pessoas.internos, t.user_assigned||"", t.user_assigned_description, "— sem responsável —");
+  c.innerHTML = pessoaOpts(pessoas.cliente,  t.assigned_customer||"", t.assigned_customer_description, "— sem resp. cliente —");
+}
+function fillPessoas(t){
+  pintaPessoas(t);                       // desenha já, com o que temos
+  const r = $("#dResp"), c = $("#dRespCli");
+  r.onchange = ()=> salvaPessoa(t, "user_assigned", r);
+  c.onchange = ()=> salvaPessoa(t, "assigned_customer", c);
+  loadPessoas().then(()=>{ if(openUuid===t.uuid) pintaPessoas(t); }).catch(()=>{});
+}
+async function salvaPessoa(t, campo, sel){
+  const antigo = t[campo]||"", novo = sel.value||"";
+  if(novo === antigo) return;
+  const nome = novo ? (sel.selectedOptions[0]?.textContent||novo).trim() : "";
+  const rotulo = campo==="user_assigned" ? "responsável interno" : "responsável do cliente";
+  const ok = await saveChanges(t, {[campo]: novo}, `${rotulo} → ${nome||"vazio"}`);
+  if(!ok){ sel.value = antigo; return; }   // falhou: desfaz na tela
+  t[campo+"_description"] = nome;
+  const alvo = $(campo==="user_assigned" ? "#dRespTxt" : "#dRespCliTxt");
+  if(alvo) alvo.textContent = nome || "—";
+  if(campo==="user_assigned") $("#dMeta").textContent = "";
+}
+
+/* ── Observadores (observer[]) ── */
+let obsCache = {};          // uuid → resposta do GET /observers
+let obsSel = new Set();     // seleção viva do modal
+function obsBadge(n){
+  const el = $("#dObsN"); if(!el) return;
+  el.textContent = (n===null||n===undefined) ? "…" : n;
+  el.classList.toggle("zero", !n);
+}
+function loadObsCount(t){
+  if(obsCache[t.uuid]){ obsBadge((obsCache[t.uuid].codigos||[]).length); return; }
+  obsBadge(null);
+  api(`/api/ticket/${t.uuid}/observers`)
+    .then(j=>{ obsCache[t.uuid]=j; if(openUuid===t.uuid) obsBadge((j.codigos||[]).length); })
+    .catch(()=>{ if(openUuid===t.uuid) obsBadge(0); });
+}
+async function openObs(){
+  const t = tickets.find(x=>x.uuid===openUuid); if(!t) return;
+  $("#obsSub").textContent = `#${t.id} — ${t.title||""}`;
+  $("#obsBusca").value = "";
+  $("#obsMeta").textContent = "";
+  $("#obsList").innerHTML = `<div class="loading" style="padding:14px">Carregando observadores…</div>`;
+  $("#obsBg").classList.add("open");
+  try{
+    const [j] = await Promise.all([api(`/api/ticket/${t.uuid}/observers`), loadPessoas().catch(()=>null)]);
+    obsCache[t.uuid] = j;
+    obsSel = new Set(j.codigos||[]);
+    // quem já observa mas não está no catálogo entra na lista mesmo assim —
+    // ninguém pode sumir da tela só porque não apareceu no /api/pessoas.
+    (j.observadores||[]).forEach(o=>{
+      if(o.id && !pessoas.internos.some(p=>p.id===o.id)) pessoas.internos.push({id:o.id, nome:o.nome||o.id});
+    });
+    obsBadge(obsSel.size);
+    renderObs();
+  }catch(e){
+    $("#obsList").innerHTML = `<div class="loading" style="padding:14px;color:var(--danger)">Falha lendo observadores: ${esc(e.message)}</div>`;
+  }
+}
+function closeObs(){ $("#obsBg").classList.remove("open"); }
+function renderObs(){
+  const busca = ($("#obsBusca").value||"").trim().toUpperCase();
+  const lista = (pessoas.internos||[]).slice()
+    .sort((a,b)=> (obsSel.has(b.id)?1:0)-(obsSel.has(a.id)?1:0) || String(a.nome||"").localeCompare(String(b.nome||"")))
+    .filter(p=> !busca || String(p.nome||"").toUpperCase().includes(busca) || String(p.id).includes(busca));
+  $("#obsList").innerHTML = lista.length ? lista.map(p=>`
+    <label class="${obsSel.has(p.id)?"on":""}" data-obs="${esc(p.id)}">
+      <input type="checkbox" ${obsSel.has(p.id)?"checked":""}> ${esc(p.nome||p.id)}
+      <span class="cod">${esc(p.id)}</span>
+    </label>`).join("")
+    : `<div class="loading" style="padding:14px">Nenhuma pessoa encontrada.</div>`;
+  $("#obsList").querySelectorAll("label").forEach(l=>{
+    l.onclick = e=>{
+      e.preventDefault();
+      const id = l.dataset.obs;
+      obsSel.has(id) ? obsSel.delete(id) : obsSel.add(id);
+      renderObs();
+    };
+  });
+  $("#obsMeta").textContent = `${obsSel.size} selecionado(s)`;
+}
+async function salvarObs(){
+  const t = tickets.find(x=>x.uuid===openUuid); if(!t) return;
+  const b = $("#btnObsSalvar"); b.disabled = true; b.textContent = "Gravando…";
+  const ok = await saveChanges(t, {observer:[...obsSel]}, `observadores (${obsSel.size})`);
+  if(ok){
+    obsCache[t.uuid] = {codigos:[...obsSel],
+      observadores:[...obsSel].map(id=>({id, nome:(pessoas.internos.find(p=>p.id===id)||{}).nome||id}))};
+    obsBadge(obsSel.size);
+    closeObs();
+  }
+  b.disabled = false; b.textContent = "💾 Gravar observadores";
+}
+window.openObs = openObs; window.closeObs = closeObs;
+
 /* ════════════════ Console de Ações (1-a-1) ════════════════ */
 let gmailLive = null;   // null=desconhecido, true/false
 async function checkGmail(){
@@ -1242,6 +1419,12 @@ function openAcoes(){
       <span class="atx"><b>Atualizar status</b><span>Atual: ${esc(t.status_description||"")}</span></span><span class="abdg tela">NA TELA</span></div>
     <div class="arow" onclick="acFoco('#dNewTag')"><span class="aic">🏷️</span>
       <span class="atx"><b>Adicionar / remover tag</b><span>${(t.tags||[]).length} tags atuais</span></span><span class="abdg tela">NA TELA</span></div>
+    <div class="arow" onclick="acFoco('#dResp')"><span class="aic">👤</span>
+      <span class="atx"><b>Trocar responsável interno</b><span>Atual: ${esc(t.user_assigned_description||"—")}</span></span><span class="abdg tela">NA TELA</span></div>
+    <div class="arow" onclick="acFoco('#dRespCli')"><span class="aic">🏢</span>
+      <span class="atx"><b>Trocar responsável do cliente</b><span>Atual: ${esc(t.assigned_customer_description||"—")}</span></span><span class="abdg tela">NA TELA</span></div>
+    <div class="arow" onclick="acObs()"><span class="aic">👁</span>
+      <span class="atx"><b>Observadores da Task</b><span>Quem acompanha sem responder — ${(obsCache[t.uuid]?.codigos||[]).length} hoje</span></span><span class="abdg live">● LIVE</span></div>
     <div class="arow" onclick="toggleHistForm()"><span class="aic">💬</span>
       <span class="atx"><b>Adicionar Histórico</b><span>Entrada na aba Histórico (Externo/Interno)</span></span><span class="abdg live">● LIVE</span></div>
     <div class="aform" id="aHistForm">
@@ -1307,6 +1490,8 @@ async function acDraft(kind){
     closeAcoes();
   }catch(e){ toast("Falha criando rascunho: "+e.message,"err"); }
 }
+function acObs(){ closeAcoes(); openObs(); }
+window.acObs=acObs;
 window.openAcoes=openAcoes; window.closeAcoes=closeAcoes; window.acFoco=acFoco;
 window.acHist=acHist; window.acDraft=acDraft; window.toggleHistForm=toggleHistForm;
 
@@ -1489,10 +1674,13 @@ $("#btnRefresh").onclick = async ()=>{
   b.disabled=false; b.textContent="⟳ Atualizar dados";
 };
 document.addEventListener("keydown", e=>{ if(e.key==="Escape"){
-  if($("#alinBg").classList.contains("open")) closeAlin();
+  if($("#obsBg").classList.contains("open")) closeObs();
+  else if($("#alinBg").classList.contains("open")) closeAlin();
   else if($("#amodalBg").classList.contains("open")) closeAcoes();
   else closeDrawer();
 } });
+$("#obsBusca").oninput = renderObs;
+$("#btnObsSalvar").onclick = salvarObs;
 
 const fmtData = d => d && d.length===8 ? `${d.slice(6,8)}/${d.slice(4,6)}/${d.slice(0,4)}` : (d||"—");
 const isoDate = d => d && d.length===8 ? `${d.slice(0,4)}-${d.slice(4,6)}-${d.slice(6,8)}` : "";
