@@ -2364,9 +2364,16 @@ def _fernet():
 
 
 def _cred_get(usuario):
-    """{gmail_email, app_password} do usuário, decifrado. None se não tem."""
-    row = q("select gmail_email, senha_cif from cockpit.gmail_credenciais where usuario=%s",
-            (usuario,), one=True)
+    """{gmail_email, app_password} do usuário, decifrado. None se não tem.
+
+    Tolera a tabela ainda não existir (migration 0011 não rodada): nesse caso o
+    app segue funcionando no modo antigo em vez de estourar 500 na tela.
+    """
+    try:
+        row = q("select gmail_email, senha_cif from cockpit.gmail_credenciais where usuario=%s",
+                (usuario,), one=True)
+    except Exception:
+        return None
     if not row:
         return None
     try:
@@ -2458,9 +2465,15 @@ def api_gmail_health():
 def api_gmail_cred_get():
     if (r := require_auth()):
         return r
-    row = q("""select gmail_email, validado_em, updated_at
-                 from cockpit.gmail_credenciais where usuario=%s""",
-            (current_user(),), one=True)
+    try:
+        row = q("""select gmail_email, validado_em, updated_at
+                     from cockpit.gmail_credenciais where usuario=%s""",
+                (current_user(),), one=True)
+    except Exception as e:
+        # tabela ausente = migration 0011 pendente. Dizer isso é mais útil
+        # do que um "não foi possível verificar" genérico na tela.
+        return _json({"ok": True, "configurado": False, "gmail_email": None,
+                      "validado_em": None, "indisponivel": str(e)[:200]})
     return _json({"ok": True, "configurado": bool(row),
                   "gmail_email": row["gmail_email"] if row else None,
                   "validado_em": str(row["validado_em"]) if row and row["validado_em"] else None})
@@ -2538,16 +2551,33 @@ def api_gmail_draft():
     corpo = (body.get("corpo_html") or body.get("bodyHtml")
              or body.get("body") or body.get("html") or "")
 
-    row = q("""
-        insert into cockpit.email_drafts
-          (uuid_ticket, tipo, destinatario, assunto, corpo_html, status, created_by)
-        values (%s,%s,%s,%s,%s,'rascunho',%s)
-        returning id
-    """, (_u, tipo, to, assunto, corpo, current_user()), one=True)
-    draft_id = row["id"] if row else None
+    # O registro em cockpit.email_drafts é HISTÓRICO — o entregável é o rascunho
+    # no Gmail. `tipo` é um enum no banco (cockpit.draft_tipo): se o valor ainda
+    # não foi acrescentado lá, cai para 'custom' e, no pior caso, segue sem o
+    # histórico. Nunca deixe isso impedir o rascunho de nascer.
+    def _guarda(tp):
+        row = q("""
+            insert into cockpit.email_drafts
+              (uuid_ticket, tipo, destinatario, assunto, corpo_html, status, created_by)
+            values (%s,%s,%s,%s,%s,'rascunho',%s)
+            returning id
+        """, (_u, tp, to, assunto, corpo, current_user()), one=True)
+        return row["id"] if row else None
 
+    draft_id, draft_erro = None, None
+    try:
+        draft_id = _guarda(tipo)
+    except Exception as e:
+        try:
+            draft_id = _guarda("custom")
+        except Exception as e2:
+            draft_erro = f"{e} / {e2}"
+
+    guardado = " (histórico não gravado)" if draft_erro else ""
     cred = _cred_get(current_user())
     if not cred:
+        if draft_erro:
+            return _err(500, f"Sem conta Gmail conectada e o histórico também falhou: {draft_erro}")
         return _json({"ok": True, "id": draft_id, "mode": "saved-to-db",
                       "gmail": False,
                       "info": "Rascunho salvo no banco. Para ele nascer direto no seu Gmail, "
@@ -2555,11 +2585,12 @@ def api_gmail_draft():
     info, erro = _gmail_draft_imap(cred, to, cc, assunto, corpo)
     if erro:
         return _json({"ok": True, "id": draft_id, "mode": "saved-to-db",
-                      "gmail": False, "gmail_erro": erro,
-                      "info": f"Rascunho salvo no banco, mas o Gmail recusou: {erro}"})
+                      "gmail": False, "gmail_erro": erro, "draft_erro": draft_erro,
+                      "info": f"O Gmail recusou: {erro}"})
     return _json({"ok": True, "id": draft_id, "mode": "imap-draft", "gmail": True,
-                  "detalhe": info,
-                  "info": "Rascunho criado no seu Gmail — abra os Rascunhos para revisar e enviar."})
+                  "detalhe": info, "draft_erro": draft_erro,
+                  "info": "Rascunho criado no seu Gmail — abra os Rascunhos para "
+                          "revisar e enviar." + guardado})
 
 
 # ─────────────────────────────────────────────────────────────────────────────

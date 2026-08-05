@@ -1744,8 +1744,10 @@ function openMail(){
   api("/api/gmail/credencial").then(j=>{
     $("#mailGmail").innerHTML = j.configurado
       ? `✉️ O rascunho será criado em <b>${esc(j.gmail_email)}</b> (pasta Rascunhos).`
-      : `⚠️ Nenhuma conta Gmail conectada — o rascunho ficará só salvo no banco. `
-        + `<a href="/admin#gmail" style="color:var(--roxo);font-weight:700">Conectar meu Gmail →</a>`;
+      : j.indisponivel
+        ? `⚠️ Recurso de Gmail indisponível no servidor: <code>${esc(j.indisponivel)}</code>`
+        : `⚠️ Nenhuma conta Gmail conectada — o rascunho ficará só salvo no banco. `
+          + `<a href="/admin#gmail" style="color:var(--roxo);font-weight:700">Conectar meu Gmail →</a>`;
   }).catch(()=>{ $("#mailGmail").textContent = "Não foi possível verificar a conexão com o Gmail."; });
 }
 function closeMail(){ $("#mailBg").classList.remove("open"); }

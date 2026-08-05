@@ -40,6 +40,15 @@ comment on column cockpit.gmail_credenciais.senha_cif is
 alter table cockpit.gmail_credenciais enable row level security;
 
 -- ---------------------------------------------------------------------
+-- cockpit.email_drafts.tipo é um ENUM (cockpit.draft_tipo), não texto livre —
+-- descoberto na dor: o botão novo mandava 'gaps_filtrados' e o insert morria
+-- com "invalid input value for enum". O backend hoje cai para 'custom' se o
+-- valor faltar, mas o certo é o rótulo existir.
+-- ADD VALUE não roda dentro de bloco de transação: execute esta linha sozinha.
+-- ---------------------------------------------------------------------
+alter type cockpit.draft_tipo add value if not exists 'gaps_filtrados';
+
+-- ---------------------------------------------------------------------
 -- Conferência
 -- ---------------------------------------------------------------------
 -- select usuario, gmail_email, validado_em, updated_at
